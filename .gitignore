@@ -1,0 +1,3 @@
+__pycache__/
+# Blender writes a backup beside each file it overwrites
+*.blend1
