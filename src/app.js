@@ -251,7 +251,7 @@ const P = {
 
 /* ─── state ────────────────────────────────────────────────────────────── */
 const STORE = 'two-bay-garage-planner-v1';
-const DEFAULT_DIMS = { W: 19, D: 22, H: 8 + 4 / 12 };
+const DEFAULT_DIMS = { W: 19, D: 22, H: 97 / 12 }; // ceiling measured by the owner: 97 in.
 let saved = null;
 try { saved = JSON.parse(localStorage.getItem(STORE) || 'null'); } catch (e) { saved = null; }
 const validOpt = (k, v) => GROUPS[k] && (GROUPS[k].type === 'choice' ? GROUPS[k].choices.some(c => c.id === v) : SW[k].some(s => s.id === v));
@@ -265,6 +265,7 @@ const S = {
 if (saved && typeof saved === 'object') {
   if (saved.dims && ['W', 'D', 'H'].every(k => typeof saved.dims[k] === 'number')) {
     S.dims = { W: clamp(saved.dims.W, 18, 26), D: clamp(saved.dims.D, 18, 30), H: clamp(saved.dims.H, 7.75, 10) };
+    if (Math.abs(S.dims.H - (8 + 4 / 12)) < 1e-6) S.dims.H = DEFAULT_DIMS.H; // replace the old photo estimate
   }
   if (saved.opts) for (const k of Object.keys(CURRENT)) if (validOpt(k, saved.opts[k])) S.opts[k] = saved.opts[k];
   if (typeof saved.notes === 'boolean') S.notes = saved.notes;
@@ -286,7 +287,7 @@ const sameOpts = (a, b) => { const x = norm(a), y = norm(b); return Object.keys(
 /* ─── layout: every position the model and the estimate share ──────────── */
 function layout(d) {
   const W = d.W, D = d.D, H = d.H;
-  const L = { W, D, H, T: 0.45, curbH: 1.7, curbT: 0.22, backH: 3.15, bandH: 3.35, bw: 3.0, bd: 4.5, doorW: 8, doorH: 7, beamY: Math.min(7.65, H - 0.5) };
+  const L = { W, D, H, T: 0.45, curbH: 1.7, curbT: 0.22, backH: 3.15, bandH: 3.35, bw: 3.0, bd: 4.5, doorW: 8, doorH: 7, beamY: H - 0.79 };
   const ret = Math.max(0.3, (W - 2 * L.doorW - 1.5) / 2);
   L.doors = [[ret, ret + L.doorW], [W - ret - L.doorW, W - ret]];
   L.beamZ = D - 12 * (D / 22);

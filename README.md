@@ -33,7 +33,7 @@ reference photos are all inside it. three.js and the fonts load from public CDNs
 - **Shopping list.** Quantities are computed from the model's wall areas, with
   typical price ranges and store-search links. Copy it as plain text.
 
-Dimensions (19′-0″ × 22′-0″, 8′-4″ ceiling) are estimated from the photos. Use
+The ceiling is 97 in. (8′-1″), measured on site; width and depth (19′-0″ × 22′-0″) are estimated from the photos. Use
 **Edit size** in the planner to enter measured numbers; the model and the
 quantities update. Prices are typical US retail ranges, not quotes.
 
