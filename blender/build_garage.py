@@ -439,9 +439,20 @@ def m_glass():
 
 
 def m_clear_plastic():
+    """Thin tote walls: see-through face-on, more reflective toward grazing angles. A refractive solid would
+    leave the contents unlit, since Cycles skips the caustic paths that light them."""
     def b():
         nt = NT("Clear tote plastic")
-        nt.set(base="#EEF3F5", rough=0.14, trans=0.92, ior=1.49)
+        nt.set(base="#E9EEF0", rough=0.12, ior=1.49)
+        see = nt.n("ShaderNodeBsdfTransparent")
+        see.inputs["Color"].default_value = (0.9, 0.93, 0.94, 1)
+        lw = nt.n("ShaderNodeLayerWeight")
+        lw.inputs["Blend"].default_value = 0.35
+        mix = nt.n("ShaderNodeMixShader")
+        nt.link(nt.maprange(lw.outputs["Fresnel"], 0.0, 1.0, 0.1, 0.85), mix.inputs[0])
+        nt.link(see.outputs["BSDF"], mix.inputs[1])
+        nt.link(nt.b.outputs["BSDF"], mix.inputs[2])
+        nt.link(mix.outputs["Shader"], nt.out.inputs["Surface"])
         return nt.m
     return mat("clearplastic", b)
 
