@@ -37,6 +37,12 @@ The ceiling is 97 in. (8′-1″), measured on site; width and depth (19′-0″
 **Edit size** in the planner to enter measured numbers; the model and the
 quantities update. Prices are typical US retail ranges, not quotes.
 
+## Blender version
+
+`blender/garage.blend` is a photoreal version of the same garage, with each plan
+set up as a view layer. It uses path-traced lighting and procedural materials.
+Rendered stills are in `blender/renders/`. See [blender/README.md](blender/README.md).
+
 ## Editing
 
 | Path | What it holds |
