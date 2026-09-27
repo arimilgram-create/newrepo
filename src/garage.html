@@ -1,0 +1,400 @@
+<title>Two-Bay Garage Makeover</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root {
+  --bg: #EDEFF1;
+  --surface: #FFFFFF;
+  --surface-2: #F4F5F7;
+  --ink: #1B1E22;
+  --ink-2: #3B4148;
+  --muted: #646C76;
+  --line: #D8DCE1;
+  --line-2: #C3C9D0;
+  --accent: #2A63D4;
+  --accent-ink: #FFFFFF;
+  --accent-soft: #E6EDFB;
+  --warn: #B4540A;
+  --warn-ink: #FFFFFF;
+  --hud: rgba(255, 255, 255, 0.9);
+  --stage-top: #E2E5E9;
+  --stage-bottom: #C6CBD2;
+  --scrim: rgba(16, 19, 23, 0.46);
+  --shadow: 0 1px 2px rgba(20, 24, 28, .06), 0 6px 20px rgba(20, 24, 28, .09);
+  --f-display: "Big Shoulders Display", "Barlow Condensed", "Arial Narrow", sans-serif;
+  --f-body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101215; --surface: #171A1E; --surface-2: #1E2227; --ink: #E7EAEE; --ink-2: #C6CBD2;
+    --muted: #949CA6; --line: #2A2F35; --line-2: #3B4148; --accent: #6D99F2; --accent-ink: #0B1426;
+    --accent-soft: #1A2743; --warn: #F0A04B; --warn-ink: #231404; --hud: rgba(23, 26, 30, 0.88);
+    --stage-top: #1C2026; --stage-bottom: #0E1013; --scrim: rgba(0, 0, 0, 0.6);
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101215; --surface: #171A1E; --surface-2: #1E2227; --ink: #E7EAEE; --ink-2: #C6CBD2;
+  --muted: #949CA6; --line: #2A2F35; --line-2: #3B4148; --accent: #6D99F2; --accent-ink: #0B1426;
+  --accent-soft: #1A2743; --warn: #F0A04B; --warn-ink: #231404; --hud: rgba(23, 26, 30, 0.88);
+  --stage-top: #1C2026; --stage-bottom: #0E1013; --scrim: rgba(0, 0, 0, 0.6);
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .35);
+  color-scheme: dark;
+}
+
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 14px/1.45 var(--f-body); -webkit-font-smoothing: antialiased;
+}
+[hidden] { display: none !important; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+
+.app { display: grid; grid-template-columns: minmax(0, 1fr) clamp(340px, 31vw, 430px); height: 100%; }
+
+/* ── 3D stage ─────────────────────────────── */
+.stage {
+  position: relative; min-width: 0; min-height: 0; overflow: hidden;
+  background: linear-gradient(180deg, var(--stage-top), var(--stage-bottom));
+}
+#gl { position: absolute; inset: 0; }
+#gl canvas { display: block; width: 100%; height: 100%; touch-action: none; outline: none; cursor: grab; }
+#gl canvas:active { cursor: grabbing; }
+.hud { position: absolute; z-index: 3; pointer-events: none; display: flex; gap: 8px; }
+.hud > * { pointer-events: auto; }
+.hud-tl { top: 16px; left: 16px; }
+.hud-tr { top: 16px; right: 16px; flex-direction: column; align-items: flex-end; }
+.hud-b { left: 16px; right: 16px; bottom: 16px; justify-content: space-between; align-items: flex-end; }
+.card {
+  background: var(--hud); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: var(--shadow); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+}
+.title-card { padding: 10px 14px 11px; max-width: 330px; }
+.eyebrow { margin: 0; font: 600 11px/1.25 var(--f-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 {
+  margin: 3px 0 5px; font: 800 32px/.92 var(--f-display); letter-spacing: .01em;
+  text-transform: uppercase; text-wrap: balance;
+}
+.dims-line { margin: 0; font: 500 12px/1.3 var(--f-mono); color: var(--ink-2); }
+.hint { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+
+.seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 9px; }
+.seg button {
+  border: 0; background: transparent; padding: 7px 12px; border-radius: 7px; cursor: pointer;
+  font: 600 12.5px/1 var(--f-body); color: var(--ink-2);
+}
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.seg button:disabled { opacity: .45; cursor: default; }
+.now-banner { padding: 7px 11px; font-size: 12.5px; color: var(--ink-2); max-width: 260px; }
+
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px; max-width: 100%; }
+.chip {
+  border: 1px solid var(--line-2); background: var(--surface); color: var(--ink-2); cursor: pointer;
+  border-radius: 7px; padding: 6px 10px; font: 600 12px/1.1 var(--f-body); white-space: nowrap;
+}
+.chip:hover { border-color: var(--muted); color: var(--ink); }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.toggles { flex-wrap: nowrap; }
+
+.photos { display: flex; gap: 6px; padding: 6px; }
+.thumb {
+  position: relative; width: 78px; aspect-ratio: 4 / 3; max-width: 100%; padding: 0; border: 1px solid var(--line-2);
+  border-radius: 6px; overflow: hidden; cursor: pointer; background: var(--surface-2);
+}
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb span {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 2px 4px; font: 600 10px/1.2 var(--f-body);
+  color: #fff; background: linear-gradient(transparent, rgba(0, 0, 0, .7)); text-align: left;
+}
+.thumb[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+
+.inset {
+  position: absolute; z-index: 4; right: 16px; bottom: 92px; width: min(340px, calc(100% - 32px));
+  margin: 0; padding: 6px; display: grid; gap: 6px;
+}
+.inset img { width: 100%; max-width: 100%; border-radius: 6px; display: block; }
+.inset figcaption { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-2); padding: 0 4px 2px; }
+.linkbtn { border: 0; background: none; padding: 2px 4px; color: var(--accent); font-weight: 600; cursor: pointer; font-size: 12px; }
+
+.overlay { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.pin {
+  position: absolute; left: 0; top: 0; pointer-events: auto; width: 22px; height: 22px; margin: -11px 0 0 -11px;
+  border-radius: 50%; border: 2px solid var(--surface); background: var(--accent); color: var(--accent-ink);
+  font: 700 11px/18px var(--f-mono); text-align: center; padding: 0; cursor: pointer; box-shadow: 0 2px 6px rgba(0, 0, 0, .3);
+}
+.pin.warn { background: var(--warn); color: var(--warn-ink); }
+.tip {
+  position: absolute; left: 0; top: 0; pointer-events: auto; width: 240px; max-width: calc(100% - 32px);
+  padding: 10px 12px; font-size: 12.5px; line-height: 1.4; color: var(--ink-2); z-index: 3;
+}
+.tip b { display: block; color: var(--ink); font-size: 13px; margin-bottom: 2px; }
+.dim-label {
+  position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); padding: 2px 6px; border-radius: 5px;
+  background: var(--hud); border: 1px solid var(--line); font: 600 11.5px/1.3 var(--f-mono); color: var(--ink); white-space: nowrap;
+}
+.loading {
+  position: absolute; inset: 0; display: grid; place-items: center; z-index: 1;
+  font: 600 13px/1.4 var(--f-body); color: var(--muted); text-align: center; padding: 0 16px;
+}
+
+/* ── Planner panel ────────────────────────── */
+.panel { min-height: 0; overflow-y: auto; background: var(--surface); border-left: 1px solid var(--line); display: flex; flex-direction: column; }
+.panel-head { padding: 20px 20px 16px; border-bottom: 1px solid var(--line); display: grid; gap: 6px; }
+.panel-head h2 { margin: 0; font: 800 26px/1 var(--f-display); letter-spacing: .02em; text-transform: uppercase; text-wrap: balance; }
+.lede { margin: 0; color: var(--ink-2); font-size: 13.5px; max-width: 60ch; }
+.size-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 4px; }
+.size-row .mono { font-size: 12.5px; color: var(--ink); font-weight: 500; }
+.fine { margin: 0; font-size: 12px; color: var(--muted); }
+.dims-form { display: grid; gap: 10px; padding: 12px; margin-top: 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+.dims-form .row { display: grid; grid-template-columns: 70px 1fr; align-items: center; gap: 8px; }
+.dims-form label { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.ftin { display: flex; align-items: center; gap: 4px; font: 500 12px var(--f-mono); color: var(--muted); }
+.ftin input {
+  width: 58px; padding: 6px 7px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--surface);
+  color: var(--ink); font: 500 13px var(--f-mono);
+}
+.form-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.form-err { margin: 0; color: var(--warn); font-size: 12.5px; }
+
+.sec { padding: 18px 20px 20px; border-bottom: 1px solid var(--line); display: grid; gap: 18px; }
+.sec-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.sec h3 { margin: 0; font: 700 19px/1 var(--f-display); letter-spacing: .06em; text-transform: uppercase; }
+.sec-cost { font: 500 12px var(--f-mono); color: var(--muted); }
+.grp { display: grid; gap: 8px; }
+.grp-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.grp-head h4 { margin: 0; font: 600 13px/1.3 var(--f-body); color: var(--ink); }
+.grp-head .note { font: 500 11.5px/1.3 var(--f-mono); color: var(--muted); text-align: right; }
+.choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.choice, .plan {
+  display: grid; align-content: start; gap: 2px; text-align: left; padding: 10px 11px 11px; border: 1px solid var(--line-2);
+  border-radius: 8px; background: var(--surface); cursor: pointer; min-width: 0;
+}
+.choice:hover, .plan:hover { border-color: var(--muted); }
+.choice[aria-checked="true"], .plan[aria-checked="true"] {
+  border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-soft);
+}
+.c-label { font-weight: 600; font-size: 13.5px; line-height: 1.25; }
+.c-sub { font-size: 12px; line-height: 1.3; color: var(--muted); }
+.c-price { margin-top: 5px; font: 500 11.5px var(--f-mono); color: var(--ink-2); }
+.swatches { display: flex; flex-wrap: wrap; gap: 10px; padding: 4px 2px; }
+.sw {
+  position: relative; width: 30px; height: 30px; padding: 0; border-radius: 50%; cursor: pointer;
+  border: 1px solid rgba(0, 0, 0, .2); background: var(--c);
+}
+.sw.none { background: repeating-linear-gradient(45deg, var(--surface) 0 4px, var(--line-2) 4px 7px); }
+.sw[aria-checked="true"]::after { content: ""; position: absolute; inset: -5px; border-radius: 50%; border: 2px solid var(--accent); }
+.why { margin: 0; font-size: 13px; color: var(--ink-2); max-width: 62ch; }
+details.prods { border-top: 1px dashed var(--line); padding-top: 8px; }
+details.prods summary { cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--accent); list-style-position: inside; }
+.prod-list { list-style: none; margin: 10px 0 2px; padding: 0; display: grid; gap: 10px; }
+.prod-list li { display: grid; gap: 2px; padding-left: 10px; border-left: 2px solid var(--line-2); }
+.prod-list a, .prod-list .pname { color: var(--ink); font-weight: 600; font-size: 13px; }
+.prod-list a { text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 2px; }
+.prod-list a:hover { text-decoration-color: var(--accent); }
+.p-meta { font: 500 11.5px/1.35 var(--f-mono); color: var(--ink-2); }
+.p-detail { font-size: 12px; color: var(--muted); }
+
+.plans { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.plan-name { font: 700 17px/1.05 var(--f-display); letter-spacing: .03em; text-transform: uppercase; }
+.plan-blurb { font-size: 12px; line-height: 1.3; color: var(--muted); }
+.plan-price { margin-top: 6px; font: 600 12px var(--f-mono); color: var(--ink); }
+.custom-note { margin: 0; font-size: 12.5px; color: var(--muted); }
+
+.photo-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.photo-grid .thumb { width: 100%; }
+
+.total {
+  position: sticky; bottom: 0; margin-top: auto; z-index: 2; background: var(--surface); border-top: 1px solid var(--line);
+  padding: 12px 20px calc(12px + env(safe-area-inset-bottom, 0px)); display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.t-label { display: block; font: 600 11px/1.2 var(--f-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.t-range { display: block; font: 800 27px/1.05 var(--f-display); letter-spacing: .01em; margin: 2px 0 1px; }
+.t-note { display: block; font-size: 11.5px; color: var(--muted); }
+.btn {
+  border: 1px solid var(--line-2); background: var(--surface); color: var(--ink); border-radius: 8px; padding: 9px 13px;
+  font: 600 13px/1 var(--f-body); cursor: pointer; white-space: nowrap;
+}
+.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn .count { display: inline-block; margin-left: 6px; padding: 2px 6px; border-radius: 10px; background: rgba(255, 255, 255, .22); font: 600 11px var(--f-mono); }
+
+.sheet { position: fixed; inset: 0; z-index: 30; background: var(--scrim); display: grid; place-items: center; padding: 16px; }
+.sheet-card {
+  width: min(680px, 100%); max-height: min(86vh, 900px); max-height: min(86dvh, 900px); display: flex; flex-direction: column;
+  background: var(--surface); border-radius: 12px; border: 1px solid var(--line); box-shadow: var(--shadow); overflow: hidden;
+}
+.sheet-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+.sheet-head h2 { margin: 0; font: 800 24px/1 var(--f-display); text-transform: uppercase; letter-spacing: .02em; }
+.sheet-body { overflow-y: auto; padding: 4px 20px 20px; }
+.sheet-body h3 { margin: 18px 0 10px; font: 700 16px/1 var(--f-display); letter-spacing: .06em; text-transform: uppercase; display: flex; justify-content: space-between; gap: 8px; }
+.sheet-body h3 span { font: 500 12px var(--f-mono); letter-spacing: 0; text-transform: none; color: var(--muted); }
+.sheet-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 20px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.copy-fallback { width: 100%; min-height: 160px; font: 12px/1.4 var(--f-mono); border: 1px solid var(--line-2); border-radius: 6px; background: var(--surface-2); color: var(--ink); padding: 8px; box-sizing: border-box; }
+.empty { color: var(--muted); font-size: 13px; margin: 16px 0 0; }
+
+@media (min-width: 900px) { #photosSec { display: none; } }
+@media (max-width: 899px) {
+  .app { display: block; height: auto; }
+  .stage { position: sticky; top: env(safe-area-inset-top, 0px); height: 52vh; height: 52svh; z-index: 5; }
+  .panel { border-left: 0; overflow: visible; }
+  .title-card { padding: 7px 11px 8px; }
+  .title-card .eyebrow, .title-card .dims-line, .title-card .hint { display: none; }
+  h1 { font-size: 23px; margin: 0; }
+  .hud-tl { top: 12px; }
+  .hud-tr { top: 12px; }
+  .hud-b { bottom: 12px; }
+  .hud-photos { display: none !important; }
+  .toolbar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .toolbar::-webkit-scrollbar { display: none; }
+  .inset { bottom: 64px; width: min(240px, calc(100% - 32px)); }
+  .now-banner { display: none; }
+}
+@media (max-width: 420px) {
+  .choices, .plans { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}
+</style>
+<!--BODY-->
+<div class="app">
+  <section class="stage" id="stage" aria-label="Interactive 3D model of the garage">
+    <div id="gl"></div>
+    <div class="loading" id="loading">Building your garage…</div>
+    <div class="overlay" id="overlay" aria-hidden="false"></div>
+
+    <div class="hud hud-tl">
+      <div class="card title-card">
+        <p class="eyebrow">Built from 6 photos and 2 videos</p>
+        <h1>Two-Bay Garage</h1>
+        <p class="dims-line" id="hudDims">19′-0″ × 22′-0″ · 8′-4″ ceiling</p>
+        <p class="hint">Drag to orbit · scroll to zoom · right-drag to pan</p>
+      </div>
+    </div>
+
+    <div class="hud hud-tr">
+      <div class="card seg" role="group" aria-label="Compare">
+        <button type="button" id="cmpNow" aria-pressed="false">Now</button>
+        <button type="button" id="cmpPlan" aria-pressed="true">Plan</button>
+      </div>
+      <div class="card toolbar toggles" role="group" aria-label="Overlays">
+        <button type="button" class="chip" id="tglNotes" aria-pressed="true">Notes</button>
+        <button type="button" class="chip" id="tglDims" aria-pressed="false">Dimensions</button>
+      </div>
+      <div class="card now-banner" id="nowBanner" hidden>Showing the garage as photographed. Pick <b>Plan</b> to see your changes.</div>
+    </div>
+
+    <div class="hud hud-b">
+      <div class="card toolbar" role="toolbar" aria-label="Camera views and overlays">
+        <button type="button" class="chip" data-view="overview">Overview</button>
+        <button type="button" class="chip" data-view="doors">From the doors</button>
+        <button type="button" class="chip" data-view="back">Back wall</button>
+        <button type="button" class="chip" data-view="bikes">Bike wall</button>
+        <button type="button" class="chip" data-view="entry">House door</button>
+        <button type="button" class="chip" data-view="plan">Floor plan</button>
+      </div>
+      <div class="card photos hud-photos" id="hudPhotos" aria-label="Your photos"></div>
+    </div>
+
+    <figure class="card inset" id="inset" hidden>
+      <img id="insetImg" alt="">
+      <figcaption><span id="insetCap"></span><button type="button" class="linkbtn" id="insetClose">Close</button></figcaption>
+    </figure>
+  </section>
+
+  <aside class="panel" id="panel" aria-label="Makeover planner">
+    <header class="panel-head">
+      <p class="eyebrow">Makeover planner</p>
+      <h2>Walls, shelves and storage</h2>
+      <p class="lede">Pick a plan or mix options. The model, product list and price range update together.</p>
+      <div class="size-row">
+        <span class="mono" id="sizeText">19′-0″ × 22′-0″ × 8′-4″</span>
+        <button type="button" class="linkbtn" id="editSize" aria-expanded="false" aria-controls="dimsForm">Edit size</button>
+      </div>
+      <p class="fine">Sizes are estimated from your photos. Measure before you order anything.</p>
+      <form class="dims-form" id="dimsForm" hidden novalidate>
+        <div class="row"><label for="dimW">Width</label><span class="ftin"><input id="dimW" type="number" inputmode="numeric" min="18" max="26" step="1"> ft <input id="dimWin" type="number" inputmode="numeric" min="0" max="11" step="1"> in</span></div>
+        <div class="row"><label for="dimD">Depth</label><span class="ftin"><input id="dimD" type="number" inputmode="numeric" min="18" max="30" step="1"> ft <input id="dimDin" type="number" inputmode="numeric" min="0" max="11" step="1"> in</span></div>
+        <div class="row"><label for="dimH">Ceiling</label><span class="ftin"><input id="dimH" type="number" inputmode="numeric" min="7" max="10" step="1"> ft <input id="dimHin" type="number" inputmode="numeric" min="0" max="11" step="1"> in</span></div>
+        <p class="form-err" id="dimsErr" hidden></p>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Update model</button>
+          <button type="button" class="btn" id="dimsReset">Use photo estimate</button>
+        </div>
+      </form>
+    </header>
+
+    <section class="sec" aria-labelledby="plansH">
+      <div class="sec-head"><h3 id="plansH">Start from a plan</h3></div>
+      <div class="plans" id="planCards" role="radiogroup" aria-labelledby="plansH"></div>
+      <p class="custom-note" id="customNote" hidden>Custom mix. Pick a plan above to reset every option.</p>
+    </section>
+
+    <section class="sec" aria-labelledby="wallsH">
+      <div class="sec-head"><h3 id="wallsH">Walls</h3><span class="sec-cost" data-sec-cost="walls"></span></div>
+      <div class="grp" data-group="finish"></div>
+      <div class="grp" data-group="wall"></div>
+      <div class="grp" data-group="band"></div>
+      <div class="grp" data-group="curb"></div>
+    </section>
+
+    <section class="sec" aria-labelledby="storeH">
+      <div class="sec-head"><h3 id="storeH">Shelves and storage</h3><span class="sec-cost" data-sec-cost="storage"></span></div>
+      <div class="grp" data-group="shelves"></div>
+      <div class="grp" data-group="builtin"></div>
+      <div class="grp" data-group="cab"></div>
+      <div class="grp" data-group="bikes"></div>
+      <div class="grp" data-group="door"></div>
+      <div class="grp" data-group="slat"></div>
+    </section>
+
+    <section class="sec" aria-labelledby="ceilH">
+      <div class="sec-head"><h3 id="ceilH">Ceiling and lights</h3><span class="sec-cost" data-sec-cost="ceiling"></span></div>
+      <div class="grp" data-group="overhead"></div>
+      <div class="grp" data-group="lights"></div>
+      <div class="grp" data-group="column"></div>
+    </section>
+
+    <section class="sec" id="photosSec" aria-labelledby="photosH">
+      <div class="sec-head"><h3 id="photosH">Your photos</h3></div>
+      <p class="fine">Tap one to move the camera to about the same spot.</p>
+      <div class="photo-grid" id="panelPhotos"></div>
+    </section>
+
+    <footer class="total">
+      <div>
+        <span class="t-label">Materials estimate</span>
+        <span class="t-range mono" id="totalRange">$0</span>
+        <span class="t-note">DIY prices, before tax and delivery</span>
+      </div>
+      <button type="button" class="btn btn-primary" id="openList">Shopping list<span class="count" id="listCount">0</span></button>
+    </footer>
+  </aside>
+</div>
+
+<div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetH">
+  <div class="sheet-card">
+    <div class="sheet-head">
+      <h2 id="sheetH">Shopping list</h2>
+      <button type="button" class="btn" id="closeList">Close</button>
+    </div>
+    <div class="sheet-body" id="sheetBody"></div>
+    <div class="sheet-foot">
+      <div>
+        <span class="t-label">Materials estimate</span>
+        <span class="t-range mono" id="sheetTotal">$0</span>
+      </div>
+      <button type="button" class="btn btn-primary" id="copyList">Copy list</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/environments/RoomEnvironment.js"></script>
+<!--APP_JS-->
