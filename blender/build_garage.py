@@ -367,21 +367,27 @@ def m_concrete(key, name, paint=None):
 
 
 def m_wood(key, name, light, dark, rough=0.65, coat=0.0, scale=4.0):
+    """Face grain: long straight fibers along X with gentle figure, not swirls."""
     def b():
         nt = NT(name)
         p = nt.pos()
-        w = nt.n("ShaderNodeTexWave", wave_type="BANDS", bands_direction="X", wave_profile="SIN")
+        stretch = nt.n("ShaderNodeVectorMath", operation="MULTIPLY")
+        nt.link(p, stretch.inputs[0])
+        stretch.inputs[1].default_value = (0.3, 6.0, 6.0)
+        fibers = nt.noise(stretch.outputs["Vector"], 55.0, 8.0, 0.62)
+        w = nt.n("ShaderNodeTexWave", wave_type="BANDS", bands_direction="Y", wave_profile="SIN")
         nt.link(p, w.inputs["Vector"])
-        w.inputs["Scale"].default_value = scale
-        w.inputs["Distortion"].default_value = 7.0
-        w.inputs["Detail"].default_value = 3.0
-        w.inputs["Detail Scale"].default_value = 1.5
-        n = nt.noise(p, 18.0, 4.0)
-        f = nt.math("ADD", nt.math("MULTIPLY", w.outputs["Fac"], 0.75), nt.math("MULTIPLY", n.outputs["Fac"], 0.25))
-        col = nt.ramp(f, [(0.2, dark), (0.75, light)])
+        w.inputs["Scale"].default_value = scale * 3.0
+        w.inputs["Distortion"].default_value = 1.6
+        w.inputs["Detail"].default_value = 4.0
+        w.inputs["Detail Scale"].default_value = 2.0
+        f = nt.math("ADD", nt.math("MULTIPLY", w.outputs["Fac"], 0.5), nt.math("MULTIPLY", fibers.outputs["Fac"], 0.5))
+        col = nt.ramp(f, [(0.28, dark), (0.78, light)])
+        tone = nt.maprange(nt.noise(p, 0.9, 2.0).outputs["Fac"], 0.35, 0.65, 0.0, 0.18)
+        col = nt.mix(tone, col, lin(dark))
         nt.set(base=col, rough=rough, coat=coat)
         nt.b.inputs["Coat Roughness"].default_value = 0.12
-        nt.link(nt.bump(w.outputs["Fac"], 0.06, 0.0006), nt.b.inputs["Normal"])
+        nt.link(nt.bump(fibers.outputs["Fac"], 0.08, 0.0004), nt.b.inputs["Normal"])
         return nt.m
     return mat(key, b)
 
