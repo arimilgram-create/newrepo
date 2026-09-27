@@ -1,7 +1,8 @@
 # Two-Bay Garage in Blender
 
 `garage.blend` is a photoreal Blender model of the garage and all four makeover
-plans. It opens in Blender 4.2 or newer; every texture is packed inside it.
+plans. It was built with Blender 4.5 LTS and opens in 4.5 or newer. Every
+texture is packed inside it.
 
 ## Seeing each plan
 
@@ -34,8 +35,26 @@ Rendering is set up for Cycles: path tracing with OpenImageDenoise, the AgX view
 transform, and a slight vignette and lens fringe in the compositor. Lights are
 real area lights sized to the fixtures. Daylight comes in through the window,
 where the view outside is your own photo of the yard. On a GPU, raise the
-samples in Render Properties for cleaner stills. The stills in `renders/` were
-rendered on a 4-core CPU at 64 samples.
+samples in Render Properties for cleaner stills.
+
+White balance (Color Management) is on. It is set most of the way to the color
+of the lights, as a phone camera would set it. The file opens balanced for the
+5000 K LED shop lights; Blender shows about 5200 K, which leaves in a little
+warmth. When the script renders, it balances each plan for its own lights: the
+4400 K fluorescent tubes, the 5000 K LED shop lights, or the hex grid's mix of
+5000 K and 6000 K.
+
+## Renders
+
+These stills in `renders/` were rendered at 1600×900 on a 4-core CPU at 64
+samples.
+
+| | |
+| --- | --- |
+| ![As photographed, from the garage doors](renders/01-as-photographed-from-the-doors.jpg)<br>As photographed, from the garage doors | ![As photographed, the back wall](renders/02-as-photographed-back-wall.jpg)<br>As photographed, the back wall |
+| ![Weekend refresh, the back wall](renders/03-weekend-refresh-back-wall.jpg)<br>Weekend refresh, the back wall | ![Organized, from the garage doors](renders/04-organized-from-the-doors.jpg)<br>Organized, from the garage doors |
+| ![Showroom, from the garage doors](renders/05-showroom-from-the-doors.jpg)<br>Showroom, from the garage doors | ![Showroom, toward the garage doors](renders/06-showroom-toward-the-doors.jpg)<br>Showroom, toward the garage doors |
+| ![Showroom cutaway](renders/07-showroom-cutaway.jpg)<br>Showroom cutaway | |
 
 ## Materials
 

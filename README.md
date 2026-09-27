@@ -43,6 +43,8 @@ quantities update. Prices are typical US retail ranges, not quotes.
 set up as a view layer. It uses path-traced lighting and procedural materials.
 Rendered stills are in `blender/renders/`. See [blender/README.md](blender/README.md).
 
+![The Showroom plan, rendered in Blender](blender/renders/05-showroom-from-the-doors.jpg)
+
 ## Editing
 
 | Path | What it holds |

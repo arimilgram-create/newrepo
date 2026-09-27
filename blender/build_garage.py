@@ -1182,7 +1182,7 @@ def build_builtins(fresh, finish=None):
     if fresh:
         pm = m_paint("builtin_" + finish, f"Built-ins · {finish} enamel", {"ironore": "#434341"}.get(finish, "#434341"), rough=0.35, coat=0.2)
     else:
-        pm = m_wood("plyraw", "Plywood, raw", "#D8A866", "#B07A43", rough=0.72)
+        pm = m_wood("plyraw", "Plywood, raw", "#D6B081", "#B18B5F", rough=0.72)
     t, x0, xT, xE, dT, dU, dC = 0.06, 0.24, 4.3, X1 - 0.04, 1.75, 1.5, 1.85
     sx = lambda x: xT + (x - 4.3) * (xE - xT) / (15.96 - 4.3)
     xDiv = [sx(v) for v in (6.55, 8.05, 8.95, 10.9, 13.35)]
@@ -1620,6 +1620,16 @@ def build_overhead():
 
 
 LIGHTS = {"fluorescent": "Lighting · fluorescent (as is)", "led": "Lighting · LED shop lights", "hex": "Lighting · hex grid"}
+# The color temperature a phone camera would balance to under each option; the hex plan mixes 5000 K and 6000 K
+WHITE_BALANCE = {"fluorescent": 4400, "led": 5000, "hex": 5500}
+
+
+def white_balance(kelvin, amount=0.8):
+    """Balance most of the way to the lights' color, leaving a little warmth, as a phone camera does."""
+    vs = bpy.context.scene.view_settings
+    if hasattr(vs, "use_white_balance"):  # Blender 4.3+
+        vs.use_white_balance = True
+        vs.white_balance_whitepoint = tuple(c ** amount for c in blackbody(kelvin))
 
 
 def build_lights(key):
@@ -1800,6 +1810,7 @@ def setup_render(samples=128, res=(1920, 1080)):
     except TypeError:
         pass
     vs.exposure = -0.15
+    white_balance(WHITE_BALANCE["led"])
     sc.unit_settings.system = "IMPERIAL"
     sc.unit_settings.length_unit = "FEET"
     world = bpy.data.worlds.new("Night outside")
@@ -1882,12 +1893,16 @@ def render_all(outdir, cams, only=None, samples=None, scale=100):
             continue
         for vl in sc.view_layers:
             vl.use = vl.name == layer
+        cut = layer.endswith("cutaway")
+        white_balance(WHITE_BALANCE[dict(PLANS)[layer.replace(" · cutaway", "")]["lights"]])
         for node in sc.node_tree.nodes:
             if node.bl_idname == "CompositorNodeRLayers":
                 node.layer = layer
+            elif node.bl_idname == "CompositorNodeLensdist":
+                # the cutaway's slab edges reach the frame corners, where fringing shows most
+                node.inputs["Dispersion"].default_value = 0.004 if cut else 0.012
         sc.camera = cams[cam]
         bg = sc.world.node_tree.nodes["Background"]
-        cut = layer.endswith("cutaway")
         bg.inputs["Color"].default_value = (0.55, 0.58, 0.62, 1) if cut else (0.015, 0.018, 0.022, 1)
         bg.inputs["Strength"].default_value = 0.9 if cut else 1.0
         sc.render.filepath = os.path.join(outdir, fname + ".png")
