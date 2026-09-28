@@ -23,7 +23,7 @@ ROOT = pathlib.Path(__file__).resolve().parent
 SRC = ROOT / "src"
 TOUR = ROOT / "tour"
 PLANNER_URL = "https://claude.ai/artifact/5up8WHkrETmcXTX7hXCFN9"  # the hosted planner, linked from the hosted tour
-TOUR_URL = "tour.html"  # the hosted tour, linked from the hosted planner; set once it is published
+TOUR_URL = "https://claude.ai/artifact/4bSj1ae3Lv4Rkora9AjArd"  # the hosted tour, linked from the hosted planner
 
 
 def data_uri(name: str) -> str:
