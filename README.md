@@ -37,6 +37,18 @@ The ceiling is 97 in. (8′-1″), measured on site; width and depth (19′-0″
 **Edit size** in the planner to enter measured numbers; the model and the
 quantities update. Prices are typical US retail ranges, not quotes.
 
+## Photoreal tour
+
+`tour.html` is a 360° tour of the Blender renders: stand at the garage doors,
+by the back wall or by the house door, drag to look around, and switch plans
+without moving. While you hold **Hold to see it today**, the view shows the
+garage as photographed. The panoramas are in `tour/`, each a 4096 × 2048 render
+with a small preview that shows first.
+
+Serve the folder to open it locally (`python3 -m http.server`, then
+`http://localhost:8000/tour.html`). Browsers won't load the panoramas into
+WebGL from a `file://` page.
+
 ## Blender version
 
 `blender/garage.blend` is a photoreal version of the same garage. Its **Garage**
@@ -53,7 +65,9 @@ path-traced lighting and procedural materials. Rendered stills are in
 | `src/garage.html` | Markup and CSS |
 | `src/app.js` | The 3D scene, options, product catalog and cost model |
 | `src/assets/` | Door-board and window textures and reference thumbnails cut from the photos |
-| `build.py` | Inlines the script and images into `index.html` |
+| `src/tour.html` | The photoreal 360° tour |
+| `tour/` | Tour panoramas, rendered by `blender/build_garage.py --panos` |
+| `build.py` | Inlines the script and images into `index.html`, and builds `tour.html` |
 
 After changing anything in `src/`, rebuild:
 

@@ -92,6 +92,13 @@ h1 {
 .seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
 .seg button:disabled { opacity: .45; cursor: default; }
 .now-banner { padding: 7px 11px; font-size: 12.5px; color: var(--ink-2); max-width: 260px; }
+.tour-link {
+  display: inline-flex; align-items: center; gap: 7px; padding: 9px 12px; text-decoration: none;
+  font: 600 12.5px/1 var(--f-body); color: var(--ink);
+}
+.tour-link:hover { border-color: var(--muted); }
+.tour-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tour-link svg { width: 15px; height: 15px; flex: none; }
 
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px; max-width: 100%; }
 .chip {
@@ -278,6 +285,10 @@ details.prods summary { cursor: pointer; font-size: 12.5px; font-weight: 600; co
     </div>
 
     <div class="hud hud-tr">
+      <a class="card tour-link" href="%%TOUR_URL%%" target="_blank" rel="noopener">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><ellipse cx="8" cy="8" rx="6.5" ry="3.2"/><path d="M8 1.5v13M3.2 3.6 5 5.4M12.8 3.6 11 5.4"/></svg>
+        Photoreal 360° tour
+      </a>
       <div class="card seg" role="group" aria-label="Compare">
         <button type="button" id="cmpNow" aria-pressed="false">Now</button>
         <button type="button" id="cmpPlan" aria-pressed="true">Plan</button>

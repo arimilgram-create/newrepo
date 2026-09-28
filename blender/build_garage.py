@@ -1970,6 +1970,51 @@ def render_all(outdir, cams, only=None, samples=None, scale=100):
         vl.use = True
 
 
+# 360° panoramas for the web tour: (key, label, web position in feet, eye height 5.2 ft)
+PANOS = [
+    ("doors", "Garage doors", (9.5, 5.2, 18.8)),
+    ("back", "Back wall", (10.6, 5.2, 5.6)),
+    ("side", "House door", (14.2, 5.2, 10.8)),
+]
+
+
+def slug(text):
+    return "".join(c if c.isalnum() else "-" for c in text.lower()).strip("-")
+
+
+def render_panos(outdir, samples=24, width=4096, only=None):
+    """Render an equirectangular panorama of every plan from every PANOS spot. The image's center
+    faces the back wall (Blender +Y); its left and right edges meet facing the garage doors."""
+    sc = bpy.context.scene
+    os.makedirs(outdir, exist_ok=True)
+    sc.cycles.samples = samples
+    sc.render.resolution_x, sc.render.resolution_y = width, width // 2
+    sc.render.resolution_percentage = 100
+    sc.use_nodes = False  # no lens fringe or vignette: they would show as seams in a panorama
+    for key, label, p in PANOS:
+        cd = bpy.data.cameras.new("Pano · " + label)
+        cd.type = "PANO"
+        cd.panorama_type = "EQUIRECTANGULAR"
+        cd.clip_start = 0.05
+        ob = bpy.data.objects.new(cd.name, cd)
+        ob.location = to_bl(p)
+        ob.rotation_euler = (math.radians(90), 0, 0)
+        sc.collection.objects.link(ob)
+        for plan, _ in gp.PLANS:
+            fname = f"{slug(plan)}-{key}"
+            if only and not any(o in fname for o in only):
+                continue
+            for vl in sc.view_layers:
+                vl.use = vl.name == plan
+            gp.activate(sc, plan)
+            sc.camera = ob
+            sc.render.filepath = os.path.join(outdir, fname + ".png")
+            bpy.ops.render.render(write_still=True, layer=plan)
+            print("rendered", fname, flush=True)
+    for vl in sc.view_layers:
+        vl.use = True
+
+
 def main(argv):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", default=os.path.join(HERE, "garage.blend"))
@@ -1979,6 +2024,9 @@ def main(argv):
     ap.add_argument("--scale", type=int, default=100, help="resolution percentage for renders")
     ap.add_argument("--res", default="1920x1080", help="render size, e.g. 1600x900")
     ap.add_argument("--no-save", action="store_true")
+    ap.add_argument("--panos", metavar="DIR", help="render the 360° panoramas for the web tour into DIR")
+    ap.add_argument("--pano-width", type=int, default=4096)
+    ap.add_argument("--pano-samples", type=int, default=24)
     args = ap.parse_args(argv)
     _, cams = build()
     rx, ry = (int(v) for v in args.res.lower().split("x"))
@@ -1989,6 +2037,8 @@ def main(argv):
         print("saved", args.out, flush=True)
     if args.render:
         render_all(args.render, cams, args.only, args.samples, args.scale)
+    if args.panos:
+        render_panos(args.panos, args.pano_samples, args.pano_width, args.only)
 
 
 if __name__ == "__main__":

@@ -117,3 +117,11 @@ python3 blender/build_garage.py --render renders --res 1600x900   # plus the sti
 ```
 
 It also runs inside Blender: `blender --background --python blender/build_garage.py -- --render renders`.
+
+The 360° panoramas for the web tour (`../tour.html`) come from the same script.
+Each takes about 12 minutes at full size on a 4-core CPU:
+
+```sh
+python3 blender/build_garage.py --no-save --panos panos   # 4096 × 2048, every plan from three spots
+python3 build.py --panos panos                            # converts them into tour/ and rebuilds tour.html
+```

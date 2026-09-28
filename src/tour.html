@@ -1,0 +1,714 @@
+<title>Two-Bay Garage Tour</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* One dark look on purpose: it is a photo viewer. Tokens follow the 3D planner's dark palette. */
+:root {
+  color-scheme: dark;
+  --bg: #101215;
+  --glass: rgba(20, 23, 27, 0.78);
+  --glass-strong: rgba(20, 23, 27, 0.9);
+  --ink: #E7EAEE;
+  --ink-2: #C6CBD2;
+  --muted: #949CA6;
+  --line: rgba(231, 234, 238, 0.12);
+  --line-2: rgba(231, 234, 238, 0.24);
+  --accent: #6D99F2;
+  --accent-ink: #0B1426;
+  --plan-floor: #1E2227;
+  --plan-wall: #C6CBD2;
+  --f-display: "Big Shoulders Display", "Barlow Condensed", "Arial Narrow", sans-serif;
+  --f-body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --gutter: 16px;
+  --radius: 10px;
+}
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.45 var(--f-body);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+.app { position: relative; height: 100%; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+#view { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; outline: none; }
+#view.dragging { cursor: grabbing; }
+
+.glass {
+  background: var(--glass);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  backdrop-filter: blur(10px) saturate(1.1);
+  -webkit-backdrop-filter: blur(10px) saturate(1.1);
+}
+
+/* top: name, plans, planner link */
+.top {
+  position: absolute; left: 0; right: 0; top: 0;
+  display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap;
+  padding: 14px var(--gutter) 0;
+  pointer-events: none;
+}
+.top > * { pointer-events: auto; }
+.brand { padding: 9px 14px 10px; display: grid; gap: 1px; }
+.brand h1 {
+  margin: 0; font: 800 26px/1 var(--f-display); letter-spacing: 0.01em; text-transform: uppercase;
+  text-wrap: balance;
+}
+.brand p { margin: 0; font: 500 11px/1.4 var(--f-mono); color: var(--muted); letter-spacing: 0.04em; }
+
+.plans { display: flex; gap: 6px; padding: 6px; overflow-x: auto; scrollbar-width: none; max-width: 100%; touch-action: pan-x; }
+.plans::-webkit-scrollbar { display: none; }
+.plan {
+  appearance: none; border: 1px solid transparent; background: transparent; color: var(--ink-2);
+  font: 600 13px/1.1 var(--f-body); padding: 7px 11px 7px 8px; border-radius: 7px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px; white-space: nowrap;
+}
+.plan:hover { background: rgba(231, 234, 238, 0.07); color: var(--ink); }
+.plan[aria-pressed="true"] { background: var(--ink); color: #14171B; }
+.plan:focus-visible, .spot:focus-visible, .btn:focus-visible, .hotspot:focus-visible, .link:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+.chips { display: inline-grid; grid-template-columns: repeat(3, 7px); height: 20px; border-radius: 3px; overflow: hidden; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35); }
+.chips i { display: block; }
+
+.link {
+  margin-left: auto; align-self: flex-start;
+  color: var(--ink); text-decoration: none; font: 600 13px/1 var(--f-body);
+  padding: 11px 13px; display: inline-flex; gap: 7px; align-items: center;
+}
+.link:hover { border-color: var(--line-2); }
+.link svg { width: 14px; height: 14px; }
+
+/* bottom: floor plan and caption */
+.bottom {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  display: flex; align-items: flex-end; gap: 12px;
+  padding: 0 var(--gutter) 16px;
+  pointer-events: none;
+}
+.bottom > * { pointer-events: auto; }
+.map { width: 190px; flex: none; padding: 10px 10px 8px; }
+.map-head { display: flex; justify-content: space-between; align-items: baseline; margin: 0 2px 6px; }
+.map-head b { font: 600 11px/1 var(--f-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.map-head span { font: 500 11px/1 var(--f-mono); color: var(--muted); }
+.plan-svg { position: relative; }
+.plan-svg svg { display: block; width: 100%; height: auto; }
+.spot {
+  position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%;
+  border: 0; padding: 0; background: transparent; cursor: pointer;
+}
+.spot::after {
+  content: ""; position: absolute; inset: 7px; border-radius: 50%;
+  background: var(--bg); box-shadow: 0 0 0 2px var(--ink-2);
+}
+.spot[aria-current="true"]::after { background: var(--accent); box-shadow: 0 0 0 2px var(--ink); }
+.spot:disabled { cursor: default; }
+.spot:disabled::after { box-shadow: 0 0 0 2px var(--muted); opacity: 0.45; }
+.spot:not(:disabled):not([aria-current="true"]):hover::after { background: var(--ink-2); }
+
+.caption { flex: 1; min-width: 0; max-width: 520px; margin-left: auto; padding: 13px 15px 14px; display: grid; gap: 6px; }
+.caption h2 { margin: 0; font: 800 24px/1 var(--f-display); text-transform: uppercase; letter-spacing: 0.01em; }
+.caption p { margin: 0; color: var(--ink-2); max-width: 60ch; }
+.caption .meta { font: 500 11.5px/1.4 var(--f-mono); color: var(--muted); letter-spacing: 0.02em; font-variant-numeric: tabular-nums; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+.btn {
+  appearance: none; border: 1px solid var(--line-2); background: rgba(231, 234, 238, 0.06); color: var(--ink);
+  font: 600 13px/1 var(--f-body); padding: 9px 12px; border-radius: 7px; cursor: pointer;
+  touch-action: none;
+}
+.btn:hover { background: rgba(231, 234, 238, 0.12); }
+.btn[aria-pressed="true"] { background: var(--ink); color: #14171B; border-color: var(--ink); }
+.status { font: 500 11.5px/1 var(--f-mono); color: var(--muted); display: inline-flex; gap: 7px; align-items: center; }
+.status::before {
+  content: ""; width: 10px; height: 10px; border-radius: 50%;
+  border: 2px solid var(--line-2); border-top-color: var(--ink-2);
+  animation: spin 0.9s linear infinite;
+}
+.status[data-state="idle"]::before, .status[data-state="error"]::before { display: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* spots to walk to, drawn on the floor of the panorama */
+.hotspots { position: absolute; inset: 0; pointer-events: none; }
+.hotspot {
+  position: absolute; left: 0; top: 0; pointer-events: auto;
+  appearance: none; border: 1px solid var(--line-2); background: var(--glass-strong); color: var(--ink);
+  font: 600 12px/1 var(--f-body); padding: 7px 10px; border-radius: 999px; cursor: pointer; white-space: nowrap;
+  transform: translate(-50%, -100%); will-change: transform;
+}
+.hotspot:hover { background: var(--ink); color: #14171B; }
+.hotspot small { font: 500 10.5px/1 var(--f-mono); color: var(--muted); margin-left: 6px; }
+.hotspot:hover small { color: #3A4048; }
+
+.hint {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  padding: 10px 14px; font: 600 13px/1 var(--f-body); color: var(--ink); pointer-events: none;
+  display: inline-flex; gap: 9px; align-items: center; transition: opacity 0.6s ease;
+}
+.hint svg { width: 18px; height: 18px; }
+.hint.gone { opacity: 0; }
+
+.notice { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 14px 16px; max-width: min(360px, calc(100% - 32px)); text-align: center; }
+
+@media (max-width: 720px) {
+  .brand { padding: 7px 11px 8px; }
+  .brand h1 { font-size: 21px; }
+  .link span { display: none; }
+  .link { padding: 10px; }
+  .plans { order: 3; flex-basis: 100%; }
+  .map { width: 132px; padding: 8px 8px 6px; }
+  .map-head span { display: none; }
+  .caption { padding: 11px 12px 12px; }
+  .caption h2 { font-size: 20px; }
+  .caption p { font-size: 13px; }
+}
+@media (max-width: 420px) {
+  .caption .meta { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .status::before { animation: none; }
+  .hint { transition: none; }
+}
+</style>
+<!--BODY-->
+<div class="app" id="app">
+  <canvas id="view" tabindex="0" aria-label="360 degree view of the garage. Drag, or use the arrow keys, to look around."></canvas>
+  <div class="hotspots" id="hotspots"></div>
+
+  <header class="top">
+    <div class="brand glass">
+      <h1>Two-Bay Garage</h1>
+      <p>Photoreal 360° · rendered in Blender</p>
+    </div>
+    <nav class="plans glass" id="plans" aria-label="Makeover plans"></nav>
+    <a class="link glass" href="%%PLANNER_URL%%" target="_blank" rel="noopener">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 11.5 8 14.5l5.5-3v-7L8 1.5l-5.5 3z"/><path d="M2.5 4.5 8 7.5l5.5-3M8 7.5v7"/></svg>
+      <span>3D planner</span>
+    </a>
+  </header>
+
+  <div class="hint glass" id="hint" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 12h16M4 12l4-4M4 12l4 4M20 12l-4-4M20 12l-4 4"/></svg>
+    Drag to look around
+  </div>
+
+  <div class="bottom">
+    <section class="map glass" aria-label="Floor plan and standing spots">
+      <div class="map-head"><b>Plan</b><span>19′-0″ × 22′-0″</span></div>
+      <div class="plan-svg" id="planSvg">
+        <svg viewBox="-2.2 -2.4 23.4 27.4" aria-hidden="true">
+          <defs>
+            <pattern id="hatch" width="0.8" height="0.8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <line x1="0" y1="0" x2="0" y2="0.8" stroke="var(--line-2)" stroke-width="0.18"/>
+            </pattern>
+          </defs>
+          <rect x="0" y="0" width="19" height="22" fill="var(--plan-floor)"/>
+          <!-- bump-out in the northeast corner, built-ins along the back wall -->
+          <rect x="16" y="0" width="3" height="4.5" fill="url(#hatch)" stroke="var(--plan-wall)" stroke-width="0.22"/>
+          <rect x="0.25" y="0.1" width="15.7" height="1.9" fill="none" stroke="var(--line-2)" stroke-width="0.14"/>
+          <!-- walls: back, west (window gap), east (house-door gap) -->
+          <path d="M0 22V19.1M0 15.3V0H16M16 4.5H19V4.6M19 7.85V22" fill="none" stroke="var(--plan-wall)" stroke-width="0.45" stroke-linecap="square"/>
+          <path d="M0 15.3V19.1" stroke="var(--plan-wall)" stroke-width="0.14"/>
+          <path d="M-0.22 15.3V19.1M0.22 15.3V19.1" stroke="var(--plan-wall)" stroke-width="0.1"/>
+          <path d="M19 4.6 16.6 5.2" stroke="var(--plan-wall)" stroke-width="0.12"/>
+          <path d="M16.6 5.2A3.25 3.25 0 0 1 19 7.85" fill="none" stroke="var(--line-2)" stroke-width="0.1" stroke-dasharray="0.3 0.25"/>
+          <!-- garage doors: two 8 ft openings with the pier between -->
+          <path d="M0 22H0.75M8.75 22H10.25M18.25 22H19" stroke="var(--plan-wall)" stroke-width="0.45"/>
+          <path d="M0.75 22H8.75M10.25 22H18.25" stroke="var(--plan-wall)" stroke-width="0.12" stroke-dasharray="0.5 0.3"/>
+          <!-- beam and steel column -->
+          <path d="M0 10H19" stroke="var(--line-2)" stroke-width="0.12" stroke-dasharray="0.7 0.35"/>
+          <circle cx="8" cy="10" r="0.36" fill="var(--plan-wall)"/>
+          <!-- what you are looking at -->
+          <path id="cone" d="" fill="var(--accent)" fill-opacity="0.32" stroke="var(--accent)" stroke-width="0.1"/>
+          <text x="9.5" y="24.4" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="1.05" fill="var(--muted)">DOORS</text>
+          <text x="8" y="-0.7" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="1.05" fill="var(--muted)">BACK WALL</text>
+        </svg>
+      </div>
+    </section>
+
+    <section class="caption glass" aria-live="polite">
+      <h2 id="planName">As photographed</h2>
+      <p id="planBlurb">Today, with the new flake floor.</p>
+      <div class="meta" id="meta">Standing at the garage doors · 97 in. ceiling</div>
+      <div class="row">
+        <button class="btn" id="compare" type="button" aria-pressed="false">Hold to see it today</button>
+        <span class="status" id="status" data-state="idle"></span>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+  "use strict";
+  // Panoramas rendered by blender/build_garage.py --panos; build.py lists the ones that exist.
+  const AVAILABLE = new Set(/*PANOS*/[]/*END*/);
+  const EYE = 5.2; // feet: the panorama camera's height
+
+  const PLANS = [
+    { id: "as-photographed", name: "As photographed", blurb: "Today, with the new flake floor.",
+      chips: [["#EFEEE8", "White walls"], ["#D6B081", "Plywood built-ins"], ["#B9B4AA", "Bare concrete"]] },
+    { id: "weekend-refresh", name: "Weekend refresh", blurb: "Paint with a dark band, sealed concrete, refreshed built-ins, LED lights.",
+      chips: [["#CCC9C0", "Repose Gray walls"], ["#585858", "Peppercorn band"], ["#434341", "Iron Ore built-ins"]] },
+    { id: "organized", name: "Organized", blurb: "Steel racks and a real bench, pivot bike racks, sports slatwall, ceiling racks.",
+      chips: [["#EDECE6", "Pure White walls"], ["#F2C230", "Yellow post guard"], ["#46494E", "Charcoal concrete"]] },
+    { id: "showroom", name: "Showroom", blurb: "PVC walls, a full cabinet run, slatwall, a drop zone and hex lighting.",
+      chips: [["#F7F7F3", "PVC wall boards"], ["#4A4E54", "Graphite slatwall"], ["#33373C", "Charcoal cabinets"]] },
+  ];
+  // Standing spots in feet: x runs east from the window wall, z runs from the back wall toward the doors.
+  // heading: the direction each spot opens facing, in degrees clockwise from the back wall.
+  const SPOTS = [
+    { id: "doors", name: "Garage doors", where: "Standing at the garage doors", x: 9.5, z: 18.8, heading: 0 },
+    { id: "back", name: "Back wall", where: "Standing by the back wall", x: 10.6, z: 5.6, heading: 196 },
+    { id: "side", name: "House door", where: "Standing by the house door", x: 14.2, z: 10.8, heading: 262 },
+  ];
+
+  const $ = (id) => document.getElementById(id);
+  const app = $("app"), canvas = $("view"), hotLayer = $("hotspots");
+  const reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const has = (plan, spot) => AVAILABLE.has(`${plan}-${spot}`);
+  const store = {
+    get(k) { try { return localStorage.getItem("garage-tour." + k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem("garage-tour." + k, v); } catch (e) { /* private mode */ } },
+  };
+
+  if (typeof THREE === "undefined" || !AVAILABLE.size) {
+    const n = document.createElement("div");
+    n.className = "notice glass";
+    n.textContent = typeof THREE === "undefined" ? "The 3D viewer couldn't load. Check your connection and reload the page."
+      : "The panoramas are still rendering. Check back soon.";
+    app.appendChild(n);
+    return;
+  }
+
+  // ─── state ───
+  const firstPlan = PLANS.find((p) => p.id === store.get("plan") && SPOTS.some((s) => has(p.id, s.id))) ||
+    PLANS.find((p) => SPOTS.some((s) => has(p.id, s.id)));
+  const state = {
+    plan: firstPlan.id,
+    spot: (SPOTS.find((s) => s.id === store.get("spot") && has(firstPlan.id, s.id)) || SPOTS.find((s) => has(firstPlan.id, s.id))).id,
+    yaw: 0, pitch: -4, zoom: 1, comparing: false,
+  };
+  state.yaw = SPOTS.find((s) => s.id === state.spot).heading;
+
+  // ─── three.js ───
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance" });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const maxTex = renderer.capabilities.maxTextureSize;
+  const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(75, 1, 0.05, 1200);
+  // Equirectangular panoramas: the image center faces the back wall (north, -X here) and east is -Z.
+  const sphere = new THREE.SphereGeometry(500, 96, 48);
+  sphere.scale(-1, 1, 1);
+  const makeLayer = (order) => {
+    const m = new THREE.Mesh(sphere, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, depthTest: false }));
+    m.renderOrder = order;
+    m.visible = false;
+    scene.add(m);
+    return m;
+  };
+  let base = makeLayer(0), top = makeLayer(1);
+
+  // floor rings for the other spots
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false, side: THREE.DoubleSide });
+  const discMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.16, depthTest: false, depthWrite: false, side: THREE.DoubleSide });
+  const rings = SPOTS.map((s) => {
+    const g = new THREE.Group();
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.8, 48), ringMat);
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(0.62, 48), discMat);
+    ring.rotation.x = disc.rotation.x = -Math.PI / 2;
+    ring.renderOrder = disc.renderOrder = 5;
+    g.add(ring, disc);
+    g.visible = false;
+    g.userData.spot = s.id;
+    scene.add(g);
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "hotspot";
+    b.innerHTML = `${s.name}<small></small>`;
+    b.hidden = true;
+    b.addEventListener("click", () => goSpot(s.id));
+    hotLayer.appendChild(b);
+    return { spot: s, group: g, label: b };
+  });
+
+  // ─── textures: a small preview first, then the 4096 × 2048 render ───
+  const loader = new THREE.TextureLoader();
+  const cache = new Map(); // key -> { preview, full, promiseFull }
+  const useFull = maxTex >= 4096;
+  const prep = (t) => { t.anisotropy = aniso; t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; return t; };
+  const load = (url) => new Promise((res, rej) => loader.load(url, (t) => res(prep(t)), undefined, rej));
+  function entry(key) {
+    if (!cache.has(key)) cache.set(key, { preview: null, full: null, loading: null, used: 0 });
+    return cache.get(key);
+  }
+  function getPreview(key) {
+    const e = entry(key);
+    if (e.preview) return Promise.resolve(e.preview);
+    return load(`tour/${key}-preview.jpg`).then((t) => (e.preview = t));
+  }
+  function getFull(key) {
+    const e = entry(key);
+    if (!useFull) return getPreview(key);
+    if (e.full) return Promise.resolve(e.full);
+    if (!e.loading) e.loading = load(`tour/${key}.jpg`).then((t) => { e.full = t; e.loading = null; trim(); return t; });
+    return e.loading;
+  }
+  function trim() { // keep GPU memory in check on phones: at most four full-size panoramas
+    const fulls = [...cache.entries()].filter(([, e]) => e.full).sort((a, b) => a[1].used - b[1].used);
+    let extra = fulls.length - 4;
+    for (const [k, e] of fulls) {
+      if (extra <= 0) break;
+      if (k === shownKey || e.full === base.material.map || e.full === top.material.map) continue;
+      e.full.dispose();
+      e.full = null;
+      extra--;
+    }
+  }
+
+  // ─── showing a panorama, with a crossfade ───
+  let shownKey = null, fade = null, useCounter = 0;
+  const statusEl = $("status");
+  function setStatus(text, st) { statusEl.textContent = text; statusEl.dataset.state = text ? st || "busy" : "idle"; }
+  function show(key, { quick = false } = {}) {
+    shownKey = key;
+    const e = entry(key);
+    e.used = ++useCounter;
+    const ms = quick ? 200 : 420;
+    const ready = useFull ? e.full : e.preview;
+    if (ready) { crossfade(ready, ms); setStatus(""); preloadNeighbors(); return; }
+    setStatus("Loading…");
+    let gotFull = false;
+    getPreview(key).then((t) => { if (shownKey === key && !gotFull) crossfade(t, ms); }).catch(() => {});
+    getFull(key).then((t) => {
+      gotFull = true;
+      if (shownKey !== key) return;
+      upgrade(e.preview, t, ms);
+      setStatus("");
+      preloadNeighbors();
+    }).catch(() => { if (shownKey === key) setStatus("Couldn't load this view. Reload to try again.", "error"); });
+  }
+  function upgrade(preview, full, ms) { // swap the preview for the full render in place
+    if (preview && fade && top.material.map === preview) { top.material.map = full; top.material.needsUpdate = true; dirty = true; return; }
+    if (preview && base.visible && base.material.map === preview) { base.material.map = full; base.material.needsUpdate = true; dirty = true; return; }
+    crossfade(full, ms);
+  }
+  function crossfade(tex, ms) {
+    if (!base.visible || reduceMotion || ms === 0) {
+      base.material.map = tex; base.material.opacity = 1; base.material.needsUpdate = true; base.visible = true;
+      top.visible = false; fade = null; dirty = true;
+      return;
+    }
+    top.material.map = tex; top.material.opacity = 0; top.material.needsUpdate = true; top.visible = true;
+    fade = { start: performance.now(), ms };
+    dirty = true;
+  }
+  function stepFade(now) {
+    if (!fade) return;
+    const k = Math.min(1, (now - fade.start) / fade.ms);
+    top.material.opacity = k * k * (3 - 2 * k);
+    if (k >= 1) {
+      [base, top] = [top, base];
+      base.renderOrder = 0; top.renderOrder = 1;
+      top.visible = false; top.material.opacity = 0;
+      base.material.opacity = 1;
+      fade = null;
+    }
+    dirty = true;
+  }
+  let preloadTimer = 0;
+  function preloadNeighbors() { // the other plans from this spot, so switching plans is instant
+    clearTimeout(preloadTimer);
+    const keys = PLANS.map((p) => `${p.id}-${state.spot}`).filter((k) => AVAILABLE.has(k) && k !== shownKey);
+    let i = 0;
+    const next = () => {
+      if (i >= keys.length) return;
+      const k = keys[i++];
+      getPreview(k).then(() => getFull(k)).then(() => { preloadTimer = setTimeout(next, 250); }, () => { preloadTimer = setTimeout(next, 250); });
+    };
+    preloadTimer = setTimeout(next, 600);
+  }
+
+  // ─── plan and spot controls ───
+  const plansEl = $("plans");
+  const planButtons = PLANS.map((p, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "plan";
+    b.title = `${p.name}: ${p.chips.map((c) => c[1]).join(", ")}`;
+    b.innerHTML = `<span class="chips" aria-hidden="true">${p.chips.map((c) => `<i style="background:${c[0]}"></i>`).join("")}</span>${p.name}`;
+    b.addEventListener("click", () => goPlan(p.id));
+    plansEl.appendChild(b);
+    return b;
+  });
+  const planSvg = $("planSvg");
+  const toPct = (s) => ({ left: ((s.x + 2.2) / 23.4) * 100, top: ((s.z + 2.4) / 27.4) * 100 });
+  const spotButtons = SPOTS.map((s) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "spot";
+    const p = toPct(s);
+    b.style.left = p.left + "%";
+    b.style.top = p.top + "%";
+    b.setAttribute("aria-label", s.name);
+    b.title = s.name;
+    b.addEventListener("click", () => goSpot(s.id));
+    planSvg.appendChild(b);
+    return b;
+  });
+
+  const compareKey = () => (state.comparing ? `as-photographed-${state.spot}` : null);
+  function currentKey() { return state.comparing ? compareKey() : `${state.plan}-${state.spot}`; }
+
+  function refreshUi() {
+    const plan = PLANS.find((p) => p.id === state.plan);
+    const spot = SPOTS.find((s) => s.id === state.spot);
+    planButtons.forEach((b, i) => {
+      const p = PLANS[i];
+      b.setAttribute("aria-pressed", String(p.id === state.plan));
+      b.disabled = !has(p.id, state.spot) && !SPOTS.some((s) => has(p.id, s.id));
+    });
+    spotButtons.forEach((b, i) => {
+      const s = SPOTS[i];
+      b.disabled = !has(state.plan, s.id);
+      b.title = b.disabled ? `${s.name}: still rendering` : s.name;
+      if (s.id === state.spot) b.setAttribute("aria-current", "true"); else b.removeAttribute("aria-current");
+    });
+    $("planName").textContent = state.comparing ? "As photographed" : plan.name;
+    $("planBlurb").textContent = state.comparing ? "Today, with the new flake floor. Let go to see the plan again." : plan.blurb;
+    $("meta").textContent = `${spot.where} · 97 in. ceiling`;
+    $("compare").hidden = state.plan === "as-photographed" || !has("as-photographed", state.spot);
+    rings.forEach((r) => {
+      const on = r.spot.id !== state.spot && has(state.plan, r.spot.id);
+      r.group.visible = on;
+      r.label.hidden = !on;
+      if (on) {
+        const cur = spot;
+        const dEast = r.spot.x - cur.x, dSouth = r.spot.z - cur.z;
+        r.group.position.set(dSouth, -EYE + 0.02, -dEast);
+        r.label.querySelector("small").textContent = `${Math.round(Math.hypot(dEast, dSouth))} ft`;
+      }
+    });
+    dirty = true;
+  }
+
+  function goPlan(id) {
+    if (id === state.plan) return;
+    let spot = state.spot;
+    if (!has(id, spot)) spot = (SPOTS.find((s) => has(id, s.id)) || {}).id;
+    if (!spot) return;
+    state.plan = id;
+    state.spot = spot;
+    store.set("plan", id);
+    store.set("spot", spot);
+    refreshUi();
+    show(currentKey(), { quick: true });
+  }
+  function goSpot(id) {
+    if (id === state.spot || !has(state.plan, id)) return;
+    state.yaw = SPOTS.find((s) => s.id === id).heading;
+    state.pitch = -4;
+    state.spot = id;
+    store.set("spot", id);
+    walk = { start: performance.now(), ms: reduceMotion ? 0 : 520 };
+    refreshUi();
+    show(currentKey());
+  }
+
+  // hold to see the garage as photographed, from the same spot
+  const compareBtn = $("compare");
+  function setCompare(on) {
+    if (on === state.comparing) return;
+    state.comparing = on;
+    compareBtn.setAttribute("aria-pressed", String(on));
+    refreshUi();
+    show(currentKey(), { quick: true });
+  }
+  compareBtn.addEventListener("pointerdown", (e) => { e.preventDefault(); compareBtn.setPointerCapture(e.pointerId); setCompare(true); });
+  ["pointerup", "pointercancel", "lostpointercapture"].forEach((t) => compareBtn.addEventListener(t, () => setCompare(false)));
+  compareBtn.addEventListener("keydown", (e) => { if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); setCompare(true); } });
+  compareBtn.addEventListener("keyup", (e) => { if (e.key === " " || e.key === "Enter") setCompare(false); });
+  compareBtn.addEventListener("blur", () => setCompare(false));
+
+  // ─── looking around ───
+  let dirty = true, walk = null;
+  const pointers = new Map();
+  let drag = null, pinch = null, vel = { yaw: 0, pitch: 0 }, lastMove = 0;
+  const hint = $("hint");
+  let hinted = false;
+  const unhint = () => { if (!hinted) { hinted = true; hint.classList.add("gone"); } };
+  setTimeout(unhint, 6000);
+
+  function fovs() {
+    const aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight);
+    // aim for a 92° horizontal view, but keep the vertical view between 38° and 100°
+    let v = (2 * Math.atan(Math.tan(((92 * Math.PI) / 180) / 2) / aspect) * 180) / Math.PI;
+    v = Math.min(100, Math.max(38, v)) * state.zoom;
+    v = Math.min(110, Math.max(20, v));
+    const h = (2 * Math.atan(Math.tan(((v * Math.PI) / 180) / 2) * aspect) * 180) / Math.PI;
+    return { v, h };
+  }
+
+  canvas.addEventListener("pointerdown", (e) => {
+    canvas.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    canvas.classList.add("dragging");
+    unhint();
+    vel = { yaw: 0, pitch: 0 };
+    if (pointers.size === 1) drag = { x: e.clientX, y: e.clientY, moved: 0 };
+    if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), zoom: state.zoom };
+      drag = null;
+    }
+  });
+  canvas.addEventListener("pointermove", (e) => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && pointers.size >= 2) {
+      const [a, b] = [...pointers.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      state.zoom = clampZoom(pinch.zoom * (pinch.d / Math.max(1, d)));
+      dirty = true;
+      return;
+    }
+    if (!drag) return;
+    const { v, h } = fovs();
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    drag.x = e.clientX; drag.y = e.clientY; drag.moved += Math.abs(dx) + Math.abs(dy);
+    const dyaw = (-dx * h) / canvas.clientWidth, dpitch = (dy * v) / canvas.clientHeight;
+    state.yaw += dyaw;
+    state.pitch = clampPitch(state.pitch + dpitch);
+    const now = performance.now(), dt = Math.max(8, now - lastMove);
+    vel = { yaw: (dyaw / dt) * 16, pitch: (dpitch / dt) * 16 };
+    lastMove = now;
+    dirty = true;
+  });
+  const endPointer = (e) => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinch = null;
+    if (pointers.size === 0) {
+      canvas.classList.remove("dragging");
+      if (drag && drag.moved < 6) pickRing(e);
+      drag = null;
+      if (performance.now() - lastMove > 60 || reduceMotion) vel = { yaw: 0, pitch: 0 };
+    }
+  };
+  canvas.addEventListener("pointerup", endPointer);
+  canvas.addEventListener("pointercancel", endPointer);
+  canvas.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    unhint();
+    state.zoom = clampZoom(state.zoom * Math.exp(e.deltaY * 0.0012));
+    dirty = true;
+  }, { passive: false });
+  canvas.addEventListener("keydown", (e) => {
+    const step = e.shiftKey ? 15 : 5;
+    const k = e.key;
+    if (k === "ArrowLeft") state.yaw -= step;
+    else if (k === "ArrowRight") state.yaw += step;
+    else if (k === "ArrowUp") state.pitch = clampPitch(state.pitch + step);
+    else if (k === "ArrowDown") state.pitch = clampPitch(state.pitch - step);
+    else if (k === "+" || k === "=") state.zoom = clampZoom(state.zoom * 0.85);
+    else if (k === "-" || k === "_") state.zoom = clampZoom(state.zoom / 0.85);
+    else return;
+    e.preventDefault();
+    unhint();
+    dirty = true;
+  });
+  window.addEventListener("keydown", (e) => {
+    if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
+    const n = Number(e.key);
+    if (n >= 1 && n <= PLANS.length) goPlan(PLANS[n - 1].id);
+  });
+  function clampPitch(p) { return Math.max(-85, Math.min(85, p)); }
+  function clampZoom(z) { return Math.max(0.4, Math.min(1.3, z)); }
+
+  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+  function pickRing(e) {
+    const r = canvas.getBoundingClientRect();
+    ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    const hits = ray.intersectObjects(rings.filter((x) => x.group.visible).map((x) => x.group), true);
+    if (hits.length) {
+      let o = hits[0].object;
+      while (o && !o.userData.spot) o = o.parent;
+      if (o) goSpot(o.userData.spot);
+    }
+  }
+
+  // ─── frame loop ───
+  const v3 = new THREE.Vector3();
+  function resize() {
+    const w = app.clientWidth, h = app.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / Math.max(1, h);
+    dirty = true;
+  }
+  new ResizeObserver(resize).observe(app);
+  resize();
+
+  function frame(now) {
+    requestAnimationFrame(frame);
+    stepFade(now);
+    if (!drag && !pinch && (Math.abs(vel.yaw) > 0.002 || Math.abs(vel.pitch) > 0.002)) {
+      state.yaw += vel.yaw;
+      state.pitch = clampPitch(state.pitch + vel.pitch);
+      vel.yaw *= 0.92; vel.pitch *= 0.92;
+      dirty = true;
+    }
+    let walkZoom = 1;
+    if (walk) {
+      const k = walk.ms ? Math.min(1, (now - walk.start) / walk.ms) : 1;
+      walkZoom = 1 - 0.18 * Math.sin(Math.PI * k); // a short push forward as you move
+      if (k >= 1) walk = null;
+      dirty = true;
+    }
+    if (!dirty) return;
+    dirty = false;
+    const { v, h } = fovs();
+    camera.fov = v * walkZoom;
+    camera.updateProjectionMatrix();
+    const yaw = (state.yaw * Math.PI) / 180, pitch = (state.pitch * Math.PI) / 180;
+    v3.set(-Math.cos(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.sin(yaw) * Math.cos(pitch));
+    camera.lookAt(v3);
+    renderer.render(scene, camera);
+    placeLabels();
+    drawCone(h);
+  }
+
+  const proj = new THREE.Vector3();
+  function placeLabels() {
+    const w = canvas.clientWidth, hgt = canvas.clientHeight;
+    rings.forEach((r) => {
+      if (!r.group.visible) { r.label.hidden = true; return; }
+      proj.copy(r.group.position);
+      proj.y += 0.35;
+      const behind = proj.clone().applyMatrix4(camera.matrixWorldInverse).z > -0.5;
+      proj.project(camera);
+      const x = (proj.x * 0.5 + 0.5) * w, y = (-proj.y * 0.5 + 0.5) * hgt;
+      const off = behind || x < -80 || x > w + 80 || y < -40 || y > hgt + 40;
+      r.label.hidden = off;
+      if (!off) r.label.style.transform = `translate(${x}px, ${y - 14}px) translate(-50%, -100%)`;
+    });
+  }
+
+  const cone = document.getElementById("cone");
+  function drawCone(hfov) {
+    const s = SPOTS.find((x) => x.id === state.spot);
+    const r = 5.2, a0 = ((state.yaw - hfov / 2) * Math.PI) / 180, a1 = ((state.yaw + hfov / 2) * Math.PI) / 180;
+    const p = (a) => `${(s.x + r * Math.sin(a)).toFixed(2)} ${(s.z - r * Math.cos(a)).toFixed(2)}`;
+    cone.setAttribute("d", `M${s.x} ${s.z}L${p(a0)}A${r} ${r} 0 ${hfov > 180 ? 1 : 0} 1 ${p(a1)}Z`);
+  }
+
+  refreshUi();
+  show(currentKey());
+  requestAnimationFrame(frame);
+})();
+</script>
