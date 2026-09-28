@@ -14,7 +14,9 @@ and z runs from the back wall (0) toward the garage doors (D). Everything is
 converted to Blender meters: X east, Y north from the garage doors, Z up.
 
 Every option lives in its own collection, and each plan is a view layer that
-switches the right collections on: pick the view layer in Blender's top bar.
+switches the right collections on. garage_planner.py defines the options and plans,
+and adds the Garage tab (press N in the 3D viewport) that changes them, colors
+included. This script embeds it in the .blend, where it runs once scripts are allowed.
 """
 import argparse
 import math
@@ -27,6 +29,8 @@ from mathutils import Matrix, Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TEX = os.path.join(HERE, "textures")
+sys.path.insert(0, HERE)
+import garage_planner as gp  # noqa: E402  (options, plans and the planner panel)
 
 # ─── layout (feet) ────────────────────────────────────────────────────────
 FT = 0.3048
@@ -137,6 +141,17 @@ class NT:
 
     def val(self, sock, v):
         sock.default_value = v
+
+    def vl(self, key):
+        """A value the planner sets on each view layer (the custom property garage_<key>), so each plan
+        keeps its own colors. Returns the Attribute node's outputs: "Color" or "Fac"."""
+        return self.n("ShaderNodeAttribute", attribute_type="VIEW_LAYER", attribute_name=gp.ATTR + key).outputs
+
+    def scale(self, col, k):
+        m = self.n("ShaderNodeVectorMath", operation="SCALE")
+        self.link(col, m.inputs[0])
+        m.inputs["Scale"].default_value = k
+        return m.outputs["Vector"]
 
     def pos(self, scale=1.0):
         g = self.n("ShaderNodeNewGeometry")
@@ -298,17 +313,23 @@ def m_floor():
     return mat("floor", b)
 
 
-def m_wall(key, name, hexcol, band=None, grime=0.0, rough=0.82):
+def m_wall(key, name, hexcol, band=None, grime=0.0, rough=0.82, swatch=False):
+    """Painted drywall. With swatch=True the wall and band colors come from the view layer (see NT.vl)."""
     def b():
         nt = NT(name)
         p = nt.pos()
         sep = nt.n("ShaderNodeSeparateXYZ")
         nt.link(p, sep.inputs[0])
-        base = lin(hexcol)
-        col = nt.mix(nt.maprange(nt.noise(p, 1.4, 3.0).outputs["Fac"], 0.35, 0.65, 0.0, 1.0), tuple(x * 0.975 for x in base[:3]) + (1,), base)
+        if swatch:
+            base = nt.vl("wall")["Color"]
+            darker = nt.scale(base, 0.975)
+        else:
+            base = lin(hexcol)
+            darker = tuple(x * 0.975 for x in base[:3]) + (1,)
+        col = nt.mix(nt.maprange(nt.noise(p, 1.4, 3.0).outputs["Fac"], 0.35, 0.65, 0.0, 1.0), darker, base)
         if band:
             under = nt.math("LESS_THAN", sep.outputs["Z"], BAND_H * FT)
-            col = nt.mix(under, col, lin(band))
+            col = nt.mix(under, col, nt.vl("band")["Color"] if swatch else lin(band))
         if grime > 0:
             low = nt.maprange(sep.outputs["Z"], 0.0, 0.32, 1.0, 0.0)
             dirt = nt.math("MULTIPLY", low, nt.maprange(nt.noise(p, 6.0, 5.0).outputs["Fac"], 0.35, 0.75, 0.25, 1.0))
@@ -358,7 +379,8 @@ def m_concrete(key, name, paint=None):
             h = nt.math("ADD", n1.outputs["Fac"], nt.math("MULTIPLY", pore, -0.5))
             nt.link(nt.bump(h, 0.35, 0.0015), nt.b.inputs["Normal"])
         else:
-            c = nt.mix(nt.maprange(n1.outputs["Fac"], 0.3, 0.7), tuple(x * 0.95 for x in lin(paint)[:3]) + (1,), lin(paint))
+            sealed = nt.vl("curb")["Color"]
+            c = nt.mix(nt.maprange(n1.outputs["Fac"], 0.3, 0.7), nt.scale(sealed, 0.95), sealed)
             nt.set(base=c, rough=0.7)
             h = nt.math("ADD", nt.math("MULTIPLY", n1.outputs["Fac"], 0.5), nt.math("MULTIPLY", pore, -0.4))
             nt.link(nt.bump(h, 0.18, 0.001), nt.b.inputs["Normal"])
@@ -366,30 +388,68 @@ def m_concrete(key, name, paint=None):
     return mat(key, b)
 
 
+def wood_grain(nt, p, light, dark, scale):
+    """Face grain: long straight fibers along X with gentle figure, not swirls. Returns (color, fibers)."""
+    stretch = nt.n("ShaderNodeVectorMath", operation="MULTIPLY")
+    nt.link(p, stretch.inputs[0])
+    stretch.inputs[1].default_value = (0.3, 6.0, 6.0)
+    fibers = nt.noise(stretch.outputs["Vector"], 55.0, 8.0, 0.62)
+    w = nt.n("ShaderNodeTexWave", wave_type="BANDS", bands_direction="Y", wave_profile="SIN")
+    nt.link(p, w.inputs["Vector"])
+    w.inputs["Scale"].default_value = scale * 3.0
+    w.inputs["Distortion"].default_value = 1.6
+    w.inputs["Detail"].default_value = 4.0
+    w.inputs["Detail Scale"].default_value = 2.0
+    f = nt.math("ADD", nt.math("MULTIPLY", w.outputs["Fac"], 0.5), nt.math("MULTIPLY", fibers.outputs["Fac"], 0.5))
+    col = nt.ramp(f, [(0.28, dark), (0.78, light)])
+    tone = nt.maprange(nt.noise(p, 0.9, 2.0).outputs["Fac"], 0.35, 0.65, 0.0, 0.18)
+    return nt.mix(tone, col, lin(dark)), fibers.outputs["Fac"]
+
+
 def m_wood(key, name, light, dark, rough=0.65, coat=0.0, scale=4.0):
-    """Face grain: long straight fibers along X with gentle figure, not swirls."""
     def b():
         nt = NT(name)
-        p = nt.pos()
-        stretch = nt.n("ShaderNodeVectorMath", operation="MULTIPLY")
-        nt.link(p, stretch.inputs[0])
-        stretch.inputs[1].default_value = (0.3, 6.0, 6.0)
-        fibers = nt.noise(stretch.outputs["Vector"], 55.0, 8.0, 0.62)
-        w = nt.n("ShaderNodeTexWave", wave_type="BANDS", bands_direction="Y", wave_profile="SIN")
-        nt.link(p, w.inputs["Vector"])
-        w.inputs["Scale"].default_value = scale * 3.0
-        w.inputs["Distortion"].default_value = 1.6
-        w.inputs["Detail"].default_value = 4.0
-        w.inputs["Detail Scale"].default_value = 2.0
-        f = nt.math("ADD", nt.math("MULTIPLY", w.outputs["Fac"], 0.5), nt.math("MULTIPLY", fibers.outputs["Fac"], 0.5))
-        col = nt.ramp(f, [(0.28, dark), (0.78, light)])
-        tone = nt.maprange(nt.noise(p, 0.9, 2.0).outputs["Fac"], 0.35, 0.65, 0.0, 0.18)
-        col = nt.mix(tone, col, lin(dark))
+        col, fibers = wood_grain(nt, nt.pos(), light, dark, scale)
         nt.set(base=col, rough=rough, coat=coat)
         nt.b.inputs["Coat Roughness"].default_value = 0.12
-        nt.link(nt.bump(fibers.outputs["Fac"], 0.08, 0.0004), nt.b.inputs["Normal"])
+        nt.link(nt.bump(fibers, 0.08, 0.0004), nt.b.inputs["Normal"])
         return nt.m
     return mat(key, b)
+
+
+def m_builtin():
+    """Refreshed built-ins: enamel in the planner's color, or clear-coated plywood when "natural" is 1."""
+    def b():
+        nt = NT("Built-ins · refreshed finish")
+        wood, fibers = wood_grain(nt, nt.pos(), "#D6B081", "#B18B5F", 4.0)
+        natural = nt.vl("builtin_natural")["Fac"]
+        nt.set(base=nt.mix(natural, nt.vl("builtin")["Color"], wood), rough=nt.maprange(natural, 0.0, 1.0, 0.35, 0.5),
+               coat=nt.maprange(natural, 0.0, 1.0, 0.2, 0.35))
+        nt.b.inputs["Coat Roughness"].default_value = 0.1
+        grain = nt.math("MULTIPLY", fibers, nt.maprange(natural, 0.0, 1.0, 0.25, 1.0))
+        nt.link(nt.bump(grain, 0.08, 0.0004), nt.b.inputs["Normal"])
+        return nt.m
+    return mat("builtin", b)
+
+
+def m_cab(key, name, k, rough, coat):
+    """Cabinet steel in the planner's color; k lightens the doors a little against the carcass."""
+    def b():
+        nt = NT(name)
+        c = nt.vl("cab")["Color"]
+        nt.set(base=nt.scale(c, k) if k != 1.0 else c, rough=rough, coat=coat)
+        nt.b.inputs["Coat Roughness"].default_value = 0.08
+        nt.link(nt.bump(nt.noise(nt.pos(), 320.0, 5.0).outputs["Fac"], 0.02, 0.0004), nt.b.inputs["Normal"])
+        return nt.m
+    return mat(key, b)
+
+
+def m_slat():
+    def b():
+        nt = NT("Slatwall panels")
+        nt.set(base=nt.vl("slat")["Color"], rough=0.4)
+        return nt.m
+    return mat("slat", b)
 
 
 def m_paint(key, name, hexcol, rough=0.45, coat=0.0, peel=0.02):
@@ -704,7 +764,7 @@ def area_light(name, p_web, size, size_y, watts, kelvin=4100, rot=None):
     li.shape = "RECTANGLE"
     li.size, li.size_y = size * FT, size_y * FT
     li.energy = watts
-    li.color = blackbody(kelvin)
+    li.color = gp.blackbody(kelvin)
     ob = bpy.data.objects.new(name, li)
     ob.location = to_bl(p_web)
     if rot is not None:
@@ -712,16 +772,6 @@ def area_light(name, p_web, size, size_y, watts, kelvin=4100, rot=None):
     ob.visible_camera = False
     sub("lights").objects.link(ob)
     return ob
-
-
-def blackbody(k):
-    # compact approximation of blackbody RGB (normalized), good for 2000-10000 K
-    t = k / 100.0
-    r = 255 if t <= 66 else 329.698727446 * ((t - 60) ** -0.1332047592)
-    g = 99.4708025861 * math.log(t) - 161.1195681661 if t <= 66 else 288.1221695283 * ((t - 60) ** -0.0755148492)
-    b = 255 if t >= 66 else (0 if t <= 19 else 138.5177312231 * math.log(t - 10) - 305.0447927307)
-    c = [max(0.0, min(255.0, v)) / 255 for v in (r, g, b)]
-    return tuple(((x / 12.92) if x <= 0.04045 else ((x + 0.055) / 1.055) ** 2.4) for x in c)
 
 
 # ─── props (ported from src/app.js) ───────────────────────────────────────
@@ -1085,18 +1135,18 @@ def build_bump_gear():
 
 
 # ─── walls: one collection per finish ─────────────────────────────────────
-FINISHES = {
-    "asis": ("Walls · as is (white, water damage)", "#EFEEE8", None, 0.9, 0.85),
-    "paint_repose": ("Walls · Repose Gray + Peppercorn band", "#CCC9C0", "#585858", 0.15, 0.62),
-    "paint_white": ("Walls · Pure White paint", "#EDECE6", None, 0.15, 0.62),
-    "pvc": ("Walls · PVC boards (Trusscore)", None, None, 0.0, 0.3),
+FINISHES = {  # base color, band color, grime near the floor, roughness (paint takes its colors from the view layer)
+    "asis": ("#EFEEE8", None, 0.9, 0.85),
+    "paint": ("#CCC9C0", "#585858", 0.15, 0.62),
+    "pvc": (None, None, 0.0, 0.3),
 }
 
 
 def build_walls(key):
-    title, hexcol, band, grime, rough = FINISHES[key]
-    option(title)
-    wm = m_pvc() if key == "pvc" else m_wall("wall_" + key, f"Wall · {title}", hexcol, band=band, grime=grime, rough=rough)
+    hexcol, band, grime, rough = FINISHES[key]
+    title = option(gp.collection("finish", key)).name
+    wm = m_pvc() if key == "pvc" else m_wall("wall_" + key, f"Wall · {title}", hexcol, band=band, grime=grime, rough=rough,
+                                             swatch=key == "paint")
     zA, zB, w = D - WIN["s1"], D - WIN["s0"], WIN
     b = MB("West wall", "west")
     b.box(-T_WALL, 0, CURB_H, H, -T_WALL, zA, wm).box(-T_WALL, 0, CURB_H, H, zB, D + T_WALL, wm)
@@ -1141,15 +1191,11 @@ def m_decal():
     return mat("decal", b)
 
 
-CONCRETE = {
-    "bare": ("Concrete · bare", None),
-    "gray": ("Concrete · sealed gray (DRYLOK)", "#9A9EA3"),
-    "charcoal": ("Concrete · charcoal", "#46494E"),
-}
+CONCRETE = {"bare": None, "sealed": "#9A9EA3"}  # the planner recolors the sealed coat
 
 
 def build_concrete(key):
-    title, paint = CONCRETE[key]
+    title, paint = gp.CONCRETE[key], CONCRETE[key]
     option(title)
     cm = m_concrete("conc_" + key, title, paint)
     MB("Curb under the window wall", "west").box(-T_WALL, CURB_T, -0.25, CURB_H, 0, D, cm).done(bevel=0.006)
@@ -1189,9 +1235,9 @@ def clutter(b, x0, x1, y0, y1, depth, r):
             x += w + 0.04 + r() * 0.15
 
 
-def build_builtins(fresh, finish=None):
+def build_builtins(fresh):
     if fresh:
-        pm = m_paint("builtin_" + finish, f"Built-ins · {finish} enamel", {"ironore": "#434341"}.get(finish, "#434341"), rough=0.35, coat=0.2)
+        pm = m_builtin()
     else:
         pm = m_wood("plyraw", "Plywood, raw", "#D6B081", "#B18B5F", rough=0.72)
     t, x0, xT, xE, dT, dU, dC = 0.06, 0.24, 4.3, X1 - 0.04, 1.75, 1.5, 1.85
@@ -1340,8 +1386,8 @@ def build_cabinets():
     X = X1 - 0.05
     f = X / 15.95
     s = lambda x: x * f
-    body = m_paint("cab_body", "Cabinet steel, charcoal", "#33373C", rough=0.38, coat=0.25)
-    door = m_paint("cab_door", "Cabinet doors, charcoal", "#3A3F45", rough=0.3, coat=0.35)
+    body = m_cab("cab_body", "Cabinet steel", 1.0, rough=0.38, coat=0.25)
+    door = m_cab("cab_door", "Cabinet doors", 1.28, rough=0.3, coat=0.35)
     top = m_paint("stainless", "Stainless worktop", "#C9CDD1", rough=0.22, peel=0)
     MAT["stainless"].node_tree.nodes["Principled BSDF"].inputs["Metallic"].default_value = 1.0
     MAT["stainless"].node_tree.nodes["Principled BSDF"].inputs["Anisotropic"].default_value = 0.6
@@ -1400,20 +1446,15 @@ def build_cabinets():
     ev_charger("back", ev_x, 4.35, 0.06)
 
 
-SHELVES = {
-    "asis": "Shelves · plywood built-ins (as is)",
-    "refresh": "Shelves · refreshed built-ins (Iron Ore)",
-    "racks": "Shelves · steel racks + workbench",
-    "cabinets": "Shelves · steel cabinet wall",
-}
+SHELVES = ("asis", "refresh", "racks", "cabinets")
 
 
 def build_shelves(key):
-    option(SHELVES[key])
+    option(gp.collection("shelves", key))
     if key == "asis":
         build_builtins(False)
     elif key == "refresh":
-        build_builtins(True, "ironore")
+        build_builtins(True)
     elif key == "racks":
         build_racks()
     else:
@@ -1425,9 +1466,9 @@ BIKE_SPECS = [dict(name="Bike · blue MTB", frame_hex="#1F4FA3", accent_hex="#E9
               dict(name="Bike · silver hybrid", frame_hex="#C9CCD0", accent_hex="#9AA0A6")]
 
 
-def slatwall(group, frame, s0, s1, y0, y1, hexcol, name):
+def slatwall(group, frame, s0, s1, y0, y1, name):
     b = MB(name, group, frame)
-    face, trim = P(hexcol, 0.4), P("#2F3236", 0.45)
+    face, trim = m_slat(), P("#2F3236", 0.45)
     slat = 0.25
     y = y0
     while y < y1 - 1e-6:
@@ -1448,11 +1489,11 @@ def hang_flat(spec, rear, y, d, hooks_from=5.7):
     h.done(bevel=0.002)
 
 
-BIKES = {"asis": "Bike wall · as is", "steadyrack": "Bike wall · Steadyrack pivot racks", "slatwall": "Bike wall · graphite slatwall"}
+BIKES = ("asis", "steadyrack", "slatwall")
 
 
 def build_bikes(key):
-    option(BIKES[key])
+    option(gp.collection("bikes", key))
     fr = WALL["west"]
     if key == "asis":
         b = MB("Broom holder, push broom, bike cleat", "west", fr)
@@ -1487,7 +1528,7 @@ def build_bikes(key):
             r.done(bevel=0.003)
             bike(spec["name"], "west", pv @ T(0, 2.45, 1.2) @ basis, spec["frame_hex"], spec["accent_hex"], rack=spec.get("rack", False), mtb=spec.get("mtb", False))
     else:
-        slatwall("west", fr, 7.4, D - 1.9, 2.05, 6.05, "#4A4E54", "Slatwall (graphite)")
+        slatwall("west", fr, 7.4, D - 1.9, 2.05, 6.05, "Slatwall")
         hang_flat(BIKE_SPECS[0], D - 6.45, 4.45, 0.36)
         hang_flat(BIKE_SPECS[1], D - 2.95, 3.95, 0.66)
         t = MB("Yard tools and basket on slatwall", "west", fr)
@@ -1505,11 +1546,11 @@ def build_bikes(key):
 
 
 # ─── house-door wall ──────────────────────────────────────────────────────
-DOORWALL = {"asis": "House-door wall · peg rail (as is)", "slatwall": "House-door wall · gray sports slatwall", "dropzone": "House-door wall · drop zone"}
+DOORWALL = ("asis", "slatwall", "dropzone")
 
 
 def build_doorwall(key):
-    option(DOORWALL[key])
+    option(gp.collection("door", key))
     fr = WALL["east"]
     b = MB("Sports gear", "east", fr)
     wood = m_wood("lightwood", "Light pine", "#EAD5B3", "#CDAE82", rough=0.55)
@@ -1545,7 +1586,7 @@ def build_doorwall(key):
         lacrosse(b, D - 1.35, 2.6, 6.2)
         b.done(bevel=0.003)
     elif key == "slatwall":
-        slatwall("east", fr, 9.0, D - 1.1, 2.0, 6.0, "#A7ABB0", "Slatwall (gray)")
+        slatwall("east", fr, 9.0, D - 1.1, 2.0, 6.0, "Sports slatwall")
         wire = P("#26282B", 0.4, 0.5)
         for i in range(12):
             x = 9.4 + i * 1.8 / 11
@@ -1607,7 +1648,7 @@ def build_doorwall(key):
 
 # ─── overhead, lighting, column ───────────────────────────────────────────
 def build_overhead():
-    option("Overhead racks · two 4 × 8")
+    option(gp.collection("overhead", "two"))
     deck, z0, z1 = 6.82, 2.35, BEAM_Z - 0.5
     dark = m_paint("powderblk", "Powder-coated steel, black", "#2A2D31", rough=0.42, coat=0.1)
     for i, (x0, x1) in enumerate(((W * 0.25, W * 0.25 + 4), (W * 0.54, W * 0.54 + 4))):
@@ -1630,21 +1671,11 @@ def build_overhead():
         b.done(bevel=0.003)
 
 
-LIGHTS = {"fluorescent": "Lighting · fluorescent (as is)", "led": "Lighting · LED shop lights", "hex": "Lighting · hex grid"}
-# The color temperature a phone camera would balance to under each option; the hex plan mixes 5000 K and 6000 K
-WHITE_BALANCE = {"fluorescent": 4400, "led": 5000, "hex": 5500}
-
-
-def white_balance(kelvin, amount=0.8):
-    """Balance most of the way to the lights' color, leaving a little warmth, as a phone camera does."""
-    vs = bpy.context.scene.view_settings
-    if hasattr(vs, "use_white_balance"):  # Blender 4.3+
-        vs.use_white_balance = True
-        vs.white_balance_whitepoint = tuple(c ** amount for c in blackbody(kelvin))
+LIGHTS = ("fluorescent", "led", "hex")
 
 
 def build_lights(key):
-    option(LIGHTS[key])
+    option(gp.collection("lights", key))
     zN = (1.9 + BEAM_Z - 0.6) / 2
     xs = (W * 0.2, W * 0.5, W * 0.8)
     housing = m_paint("fixture", "Fixture housing, white", "#F1F1EE", rough=0.35)
@@ -1707,11 +1738,11 @@ def hex_grid(x0, x1, z0, z1):
         area_light("Hex grid fill", (px, H - 0.2, pz), 4.0, 3.0, 85, kelvin=6000)
 
 
-COLUMN = {"asis": "Column · foam and tape (as is)", "rope": "Column · manila rope wrap", "guard": "Column · yellow post guard"}
+COLUMN = ("asis", "rope", "guard")
 
 
 def build_column(key):
-    option(COLUMN[key])
+    option(gp.collection("column", key))
     b = MB("Column wrap", "free")
     if key == "asis":
         b.cyl_v(COL_X, BEAM_Z, 1.2, 4.45, 0.2, m_image("foam", "Foam and duct tape", "foam.png", rough=0.6, uvscale=(1, 1)), 32)
@@ -1723,39 +1754,19 @@ def build_column(key):
 
 
 # ─── plans, cameras, render settings ──────────────────────────────────────
-PLANS = [
-    ("As photographed", dict(walls="asis", concrete="bare", shelves="asis", bikes="asis", doorwall="asis", overhead=False, lights="fluorescent", column="asis")),
-    ("Weekend refresh", dict(walls="paint_repose", concrete="gray", shelves="refresh", bikes="asis", doorwall="asis", overhead=False, lights="led", column="rope")),
-    ("Organized", dict(walls="paint_white", concrete="charcoal", shelves="racks", bikes="steadyrack", doorwall="slatwall", overhead=True, lights="led", column="guard")),
-    ("Showroom", dict(walls="pvc", concrete="charcoal", shelves="cabinets", bikes="slatwall", doorwall="dropzone", overhead=True, lights="hex", column="guard")),
-]
-
-
-def plan_collections(opts):
-    return {FINISHES[opts["walls"]][0], CONCRETE[opts["concrete"]][0], SHELVES[opts["shelves"]], BIKES[opts["bikes"]],
-            DOORWALL[opts["doorwall"]], LIGHTS[opts["lights"]], COLUMN[opts["column"]], "Base"} | ({"Overhead racks · two 4 × 8"} if opts["overhead"] else set())
-
-
-CUTAWAY = (" · front", " · east", " · ceiling", " · gear", " · fixtures", " · window view")
-
-
 def setup_view_layers():
+    """One view layer per plan, plus a cutaway twin; the planner switches their collections."""
     sc = bpy.context.scene
-    first = sc.view_layers[0]
-    layers = []
-    for i, (name, opts) in enumerate(PLANS):
-        for cut in (False, True):
-            vl = first if (i == 0 and not cut) else sc.view_layers.new(name + (" · cutaway" if cut else ""))
-            if i == 0 and not cut:
-                vl.name = name
-            keep = plan_collections(opts)
-            for lc in vl.layer_collection.children["Garage"].children:
-                lc.exclude = lc.name not in keep
-                if not lc.exclude and cut:
-                    for child in lc.children:
-                        child.exclude = child.name.endswith(CUTAWAY)
-            layers.append(vl)
-    return layers
+    for i, (name, _) in enumerate(gp.PLANS):
+        if i == 0:
+            sc.view_layers[0].name = name
+        else:
+            sc.view_layers.new(name)
+        sc.view_layers.new(name + gp.CUT)
+        gp.apply_layers(sc, name)
+        gp.apply_colors(sc, name)
+    gp.set_defaults(sc)
+    return list(sc.view_layers)
 
 
 def camera(name, p, t, lens, shift_y=0.0, ortho=None):
@@ -1781,13 +1792,14 @@ def camera(name, p, t, lens, shift_y=0.0, ortho=None):
 
 def setup_cameras():
     eye = 5.25
+    n = {k: name for k, _, name in gp.CAMERAS}
     return {
-        "doors": camera("Cam · from the garage doors", (10.8, eye, D - 0.9), (9.6, eye, 0.0), 16.5, shift_y=0.02),
-        "back": camera("Cam · back wall", (4.2, eye, D - 5.2), (9.2, eye, 2.0), 19.0),
-        "bikes": camera("Cam · bike wall", (W - 2.4, eye, 12.2), (0.0, eye, 7.2), 19.0),
-        "entry": camera("Cam · house door", (7.5, eye, 15.8), (W, eye, 9.8), 19.0),
-        "toward_doors": camera("Cam · toward the doors", (6.6, eye, 2.8), (11.0, eye, D), 16.5),
-        "overview": camera("Cam · cutaway overview", (W + 8.5, 19.5, D + 11.5), (W * 0.42, 1.2, D * 0.43), 26.0),
+        "doors": camera(n["doors"], (10.8, eye, D - 0.9), (9.6, eye, 0.0), 16.5, shift_y=0.02),
+        "back": camera(n["back"], (4.2, eye, D - 5.2), (9.2, eye, 2.0), 19.0),
+        "bikes": camera(n["bikes"], (W - 2.4, eye, 12.2), (0.0, eye, 7.2), 19.0),
+        "entry": camera(n["entry"], (7.5, eye, 15.8), (W, eye, 9.8), 19.0),
+        "toward_doors": camera(n["toward_doors"], (6.6, eye, 2.8), (11.0, eye, D), 16.5),
+        "overview": camera(n["overview"], (W + 8.5, 19.5, D + 11.5), (W * 0.42, 1.2, D * 0.43), 26.0),
     }
 
 
@@ -1821,14 +1833,17 @@ def setup_render(samples=128, res=(1920, 1080)):
     except TypeError:
         pass
     vs.exposure = -0.15
-    white_balance(WHITE_BALANCE["led"])
+    cy.preview_samples = 64  # the Rendered viewport settles quickly
+    cy.use_preview_denoising = True
     sc.unit_settings.system = "IMPERIAL"
     sc.unit_settings.length_unit = "FEET"
-    world = bpy.data.worlds.new("Night outside")
+    world = bpy.data.worlds.new("Backdrop")  # night outside, or studio gray behind a cutaway (per view layer)
     world.use_nodes = True
     bg = world.node_tree.nodes["Background"]
-    bg.inputs["Color"].default_value = (0.015, 0.018, 0.022, 1)
     bg.inputs["Strength"].default_value = 1.0
+    backdrop = world.node_tree.nodes.new("ShaderNodeAttribute")
+    backdrop.attribute_type, backdrop.attribute_name = "VIEW_LAYER", gp.ATTR + "backdrop"
+    world.node_tree.links.new(backdrop.outputs["Color"], bg.inputs["Color"])
     sc.world = world
     sc.use_nodes = True
     nt = sc.node_tree
@@ -1879,7 +1894,42 @@ def build():
     layers = setup_view_layers()
     cams = setup_cameras()
     sc.camera = cams["doors"]
+    gp.activate(sc, layers[0].name)
+    embed_planner()
+    setup_viewport()
     return layers, cams
+
+
+def embed_planner():
+    """Ship the planner panel inside the .blend. Blender runs a registered text block when the
+    file opens, once the person allows scripts."""
+    txt = bpy.data.texts.new("garage_planner.py")
+    with open(os.path.join(HERE, "garage_planner.py"), encoding="utf-8") as f:
+        txt.from_string(f.read())
+    txt.use_module = True
+
+
+def setup_viewport():
+    """Open looking through the doors camera, in Material Preview, with the sidebar on the Garage tab."""
+    screen = bpy.data.screens.get("Layout")
+    for area in (screen.areas if screen else []):
+        if area.type != "VIEW_3D":
+            continue
+        space = area.spaces.active
+        space.shading.type = "MATERIAL"
+        space.overlay.show_extras = False  # no camera and light outlines in the way
+        try:
+            space.shading.studio_light = "interior.exr"  # a neutral backdrop for Material Preview
+        except TypeError:
+            pass
+        space.show_region_ui = True
+        space.region_3d.view_perspective = "CAMERA"
+        for region in area.regions:
+            if region.type == "UI":
+                try:
+                    region.active_panel_category = "Garage"
+                except (TypeError, AttributeError, ValueError):
+                    pass
 
 
 RENDERS = [  # in render order: the most useful stills first
@@ -1904,8 +1954,8 @@ def render_all(outdir, cams, only=None, samples=None, scale=100):
             continue
         for vl in sc.view_layers:
             vl.use = vl.name == layer
-        cut = layer.endswith("cutaway")
-        white_balance(WHITE_BALANCE[dict(PLANS)[layer.replace(" · cutaway", "")]["lights"]])
+        cut = layer.endswith(gp.CUT)
+        gp.activate(sc, layer)
         for node in sc.node_tree.nodes:
             if node.bl_idname == "CompositorNodeRLayers":
                 node.layer = layer
@@ -1913,9 +1963,6 @@ def render_all(outdir, cams, only=None, samples=None, scale=100):
                 # the cutaway's slab edges reach the frame corners, where fringing shows most
                 node.inputs["Dispersion"].default_value = 0.004 if cut else 0.012
         sc.camera = cams[cam]
-        bg = sc.world.node_tree.nodes["Background"]
-        bg.inputs["Color"].default_value = (0.55, 0.58, 0.62, 1) if cut else (0.015, 0.018, 0.022, 1)
-        bg.inputs["Strength"].default_value = 0.9 if cut else 1.0
         sc.render.filepath = os.path.join(outdir, fname + ".png")
         bpy.ops.render.render(write_still=True, layer=layer)
         print("rendered", fname, flush=True)

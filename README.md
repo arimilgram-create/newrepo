@@ -39,9 +39,10 @@ quantities update. Prices are typical US retail ranges, not quotes.
 
 ## Blender version
 
-`blender/garage.blend` is a photoreal version of the same garage, with each plan
-set up as a view layer. It uses path-traced lighting and procedural materials.
-Rendered stills are in `blender/renders/`. See [blender/README.md](blender/README.md).
+`blender/garage.blend` is a photoreal version of the same garage. Its **Garage**
+tab has the same options as this planner, colors included, and it renders with
+path-traced lighting and procedural materials. Rendered stills are in
+`blender/renders/`. [blender/README.md](blender/README.md) explains how to open it.
 
 ![The Showroom plan, rendered in Blender](blender/renders/05-showroom-from-the-doors.jpg)
 
